@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: neuropharm-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: neuropharm
+      POSTGRES_PASSWORD: neuropharm_secret
+      POSTGRES_DB: neuropharm
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/C:/project/IA/Projets/neuropharm/db/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neuropharm"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: neuropharm-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "postgresql://neuropharm:neuropharm_secret@postgres:5432/neuropharm?schema=public"
+      NEXTAUTH_SECRET: "neuropharm-super-secret-key-change-in-production"
+      NEXTAUTH_URL: "http://localhost:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:

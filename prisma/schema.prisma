@@ -1,0 +1,424 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============== MULTI-TENANT ==============
+
+model Pharmacy {
+  id          String   @id @default(cuid())
+  name        String
+  address     String?
+  city        String?
+  country     String   @default("Senegal")
+  phone       String?
+  email       String?
+  logo        String?
+  taxId       String?
+  currency    String   @default("XOF")
+  timezone    String   @default("Africa/Dakar")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  subscription Subscription?
+  users        User[]
+  medications  Medication[]
+  categories   Category[]
+  stockMovements StockMovement[]
+  sales        Sale[]
+  suppliers    Supplier[]
+  purchaseOrders PurchaseOrder[]
+  expenses     Expense[]
+  attendances  Attendance[]
+  auditLogs    AuditLog[]
+  notifications Notification[]
+  inventories  Inventory[]
+  payrolls     Payroll[]
+  settings     PharmacySettings?
+
+  @@map("pharmacies")
+}
+
+model PharmacySettings {
+  id              String   @id @default(cuid())
+  pharmacyId      String   @unique
+  pharmacy        Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  taxRate         Float    @default(0)
+  lowStockThreshold Int    @default(10)
+  expiryAlertDays Int      @default(30)
+  receiptHeader   String?
+  receiptFooter   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("pharmacy_settings")
+}
+
+// ============== SUBSCRIPTIONS ==============
+
+enum SubscriptionPlan {
+  TRIAL
+  BASIC
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+  EXPIRED
+}
+
+model Subscription {
+  id          String             @id @default(cuid())
+  pharmacyId  String             @unique
+  pharmacy    Pharmacy           @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  plan        SubscriptionPlan   @default(TRIAL)
+  status      SubscriptionStatus @default(ACTIVE)
+  startDate   DateTime           @default(now())
+  endDate     DateTime?
+  amount      Float              @default(0)
+  payments    Payment[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@map("subscriptions")
+}
+
+model Payment {
+  id             String       @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  amount         Float
+  method         String       @default("mobile_money")
+  provider       String?      // wave, orange_money, etc.
+  reference      String?
+  status         String       @default("pending") // pending, completed, failed
+  paidAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@map("payments")
+}
+
+// ============== USERS & AUTH ==============
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  PHARMACIST
+  CASHIER
+  ACCOUNTANT
+}
+
+model User {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  password    String
+  firstName   String
+  lastName    String
+  phone       String?
+  role        Role      @default(CASHIER)
+  pharmacyId  String?
+  pharmacy    Pharmacy? @relation(fields: [pharmacyId], references: [id], onDelete: SetNull)
+  isActive    Boolean   @default(true)
+  lastLogin   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  sales       Sale[]
+  attendances Attendance[]
+  auditLogs   AuditLog[]
+
+  @@map("users")
+}
+
+// ============== MEDICATIONS ==============
+
+model Category {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  pharmacyId  String
+  pharmacy    Pharmacy     @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  medications Medication[]
+  createdAt   DateTime     @default(now())
+
+  @@unique([name, pharmacyId])
+  @@map("categories")
+}
+
+model Medication {
+  id           String          @id @default(cuid())
+  name         String
+  genericName  String?
+  barcode      String?
+  description  String?
+  dosage       String?
+  form         String?         // tablet, syrup, injection, etc.
+  categoryId   String?
+  category     Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  pharmacyId   String
+  pharmacy     Pharmacy        @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  purchasePrice Float          @default(0)
+  sellingPrice Float           @default(0)
+  quantity     Int             @default(0)
+  minStock     Int             @default(10)
+  expiryDate   DateTime?
+  location     String?         // shelf location
+  requiresPrescription Boolean @default(false)
+  isActive     Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  stockMovements StockMovement[]
+  saleItems      SaleItem[]
+  inventoryItems InventoryItem[]
+
+  @@map("medications")
+}
+
+// ============== STOCK ==============
+
+enum MovementType {
+  IN
+  OUT
+  ADJUSTMENT
+  RETURN
+  EXPIRED
+}
+
+model StockMovement {
+  id           String       @id @default(cuid())
+  medicationId String
+  medication   Medication   @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  pharmacyId   String
+  pharmacy     Pharmacy     @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  type         MovementType
+  quantity     Int
+  reason       String?
+  reference    String?      // PO number, sale ID, etc.
+  unitPrice    Float?
+  createdAt    DateTime     @default(now())
+
+  @@map("stock_movements")
+}
+
+model Inventory {
+  id          String          @id @default(cuid())
+  pharmacyId  String
+  pharmacy    Pharmacy        @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  name        String
+  status      String          @default("draft") // draft, in_progress, completed
+  startedAt   DateTime?
+  completedAt DateTime?
+  items       InventoryItem[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("inventories")
+}
+
+model InventoryItem {
+  id            String    @id @default(cuid())
+  inventoryId   String
+  inventory     Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  medicationId  String
+  medication    Medication @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  expectedQty   Int
+  actualQty     Int?
+  difference    Int?
+  createdAt     DateTime  @default(now())
+
+  @@map("inventory_items")
+}
+
+// ============== SALES ==============
+
+enum PaymentMethod {
+  CASH
+  MOBILE_MONEY
+  CARD
+  INSURANCE
+  CREDIT
+}
+
+model Sale {
+  id            String        @id @default(cuid())
+  pharmacyId    String
+  pharmacy      Pharmacy      @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  items         SaleItem[]
+  subtotal      Float
+  tax           Float         @default(0)
+  discount      Float         @default(0)
+  total         Float
+  paymentMethod PaymentMethod @default(CASH)
+  customerName  String?
+  customerPhone String?
+  isPrescription Boolean      @default(false)
+  status        String        @default("completed") // completed, refunded, cancelled
+  createdAt     DateTime      @default(now())
+
+  @@map("sales")
+}
+
+model SaleItem {
+  id           String     @id @default(cuid())
+  saleId       String
+  sale         Sale       @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  medicationId String
+  medication   Medication @relation(fields: [medicationId], references: [id])
+  quantity     Int
+  unitPrice    Float
+  total        Float
+  createdAt    DateTime   @default(now())
+
+  @@map("sale_items")
+}
+
+// ============== SUPPLIERS ==============
+
+model Supplier {
+  id          String          @id @default(cuid())
+  name        String
+  contact     String?
+  phone       String?
+  email       String?
+  address     String?
+  pharmacyId  String
+  pharmacy    Pharmacy        @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  orders      PurchaseOrder[]
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  id          String              @id @default(cuid())
+  pharmacyId  String
+  pharmacy    Pharmacy            @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  supplierId  String
+  supplier    Supplier            @relation(fields: [supplierId], references: [id])
+  items       PurchaseOrderItem[]
+  total       Float               @default(0)
+  status      String              @default("pending") // pending, ordered, received, cancelled
+  orderedAt   DateTime?
+  receivedAt  DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  medicationName  String
+  quantity        Int
+  unitPrice       Float
+  total           Float
+  receivedQty     Int?
+  createdAt       DateTime      @default(now())
+
+  @@map("purchase_order_items")
+}
+
+// ============== EXPENSES & ACCOUNTING ==============
+
+model Expense {
+  id          String   @id @default(cuid())
+  pharmacyId  String
+  pharmacy    Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  category    String   // rent, utilities, salaries, supplies, etc.
+  description String?
+  amount      Float
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@map("expenses")
+}
+
+model Payroll {
+  id          String   @id @default(cuid())
+  pharmacyId  String
+  pharmacy    Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  employeeName String
+  baseSalary  Float
+  bonuses     Float    @default(0)
+  deductions  Float    @default(0)
+  netSalary   Float
+  month       Int
+  year        Int
+  status      String   @default("pending") // pending, paid
+  paidAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@map("payrolls")
+}
+
+// ============== PERSONNEL ==============
+
+model Attendance {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pharmacyId  String
+  pharmacy    Pharmacy  @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  date        DateTime  @default(now())
+  checkIn     DateTime?
+  checkOut    DateTime?
+  status      String    @default("present") // present, absent, late, leave
+  notes       String?
+  createdAt   DateTime  @default(now())
+
+  @@map("attendances")
+}
+
+// ============== AUDIT & ANOMALIES ==============
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  pharmacyId  String
+  pharmacy    Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action      String   // CREATE, UPDATE, DELETE, LOGIN, SALE, etc.
+  entity      String   // medication, sale, user, etc.
+  entityId    String?
+  details     String?  // JSON string with change details
+  isSuspicious Boolean @default(false)
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([pharmacyId, createdAt])
+  @@index([isSuspicious])
+  @@map("audit_logs")
+}
+
+// ============== NOTIFICATIONS ==============
+
+model Notification {
+  id          String   @id @default(cuid())
+  pharmacyId  String
+  pharmacy    Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  title       String
+  message     String
+  type        String   // stock_low, expiry, fraud, payment, system
+  severity    String   @default("info") // info, warning, critical
+  isRead      Boolean  @default(false)
+  link        String?
+  createdAt   DateTime @default(now())
+
+  @@index([pharmacyId, isRead])
+  @@map("notifications")
+}

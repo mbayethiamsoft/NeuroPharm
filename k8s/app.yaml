@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secret
+  namespace: neuropharm
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://neuropharm:neuropharm_secret@postgres:5432/neuropharm?schema=public"
+  NEXTAUTH_SECRET: "neuropharm-production-secret-change-me"
+  NEXTAUTH_URL: "https://neuropharm.example.com"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: neuropharm-app
+  namespace: neuropharm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: neuropharm-app
+  template:
+    metadata:
+      labels:
+        app: neuropharm-app
+    spec:
+      containers:
+        - name: app
+          image: neuropharm/app:latest
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: app-secret
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /api/auth/me
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/auth/me
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: neuropharm-app
+  namespace: neuropharm
+spec:
+  selector:
+    app: neuropharm-app
+  ports:
+    - port: 80
+      targetPort: 3000
