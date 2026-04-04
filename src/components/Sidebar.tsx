@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   Pill,
@@ -15,45 +15,60 @@ import {
   Settings,
   LogOut,
   X,
+  Wallet,
 } from 'lucide-react'
 import { useDashboard } from './DashboardProvider'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Medicaments', href: '/dashboard/medicaments', icon: Pill },
+  { name: 'Médicaments', href: '/dashboard/medicaments', icon: Pill },
   { name: 'Stock', href: '/dashboard/stock', icon: Package },
   { name: 'Ventes (POS)', href: '/dashboard/ventes', icon: ShoppingCart },
   { name: 'Fournisseurs', href: '/dashboard/fournisseurs', icon: Truck },
   { name: 'Personnel', href: '/dashboard/personnel', icon: Users },
-  { name: 'Comptabilite', href: '/dashboard/comptabilite', icon: Calculator },
+  { name: 'Comptabilité', href: '/dashboard/comptabilite', icon: Calculator },
+  { name: 'Paie', href: '/dashboard/paie', icon: Wallet },
   { name: 'Anomalies', href: '/dashboard/anomalies', icon: AlertTriangle },
   { name: 'Notifications', href: '/dashboard/notifications', icon: Bell },
-  { name: 'Parametres', href: '/dashboard/parametres', icon: Settings },
+  { name: 'Paramètres', href: '/dashboard/parametres', icon: Settings },
 ]
 
 const roleBadgeColors: Record<string, string> = {
+  SUPER_ADMIN: 'bg-red-500/20 text-red-300 border-red-500/30',
   OWNER: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
   ADMIN: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
   PHARMACIST: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
   TECHNICIAN: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
   CASHIER: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
+  ACCOUNTANT: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
 }
 
 const roleLabels: Record<string, string> = {
-  OWNER: 'Proprietaire',
+  SUPER_ADMIN: 'Super Admin',
+  OWNER: 'Propriétaire',
   ADMIN: 'Administrateur',
   PHARMACIST: 'Pharmacien',
   TECHNICIAN: 'Technicien',
   CASHIER: 'Caissier',
+  ACCOUNTANT: 'Comptable',
 }
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const { user, sidebarOpen, setSidebarOpen } = useDashboard()
 
   const isActive = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard'
     return pathname.startsWith(href)
+  }
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+      router.push('/login')
+      router.refresh()
+    } catch { /* silent */ }
   }
 
   return (
@@ -173,7 +188,7 @@ export default function Sidebar() {
           })}
 
           <p className="px-3 mt-6 mb-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-            Systeme
+            Système
           </p>
           {navigation.slice(8).map((item) => {
             const active = isActive(item.href)
@@ -227,15 +242,13 @@ export default function Sidebar() {
                 {roleLabels[user.role] || user.role}
               </span>
             </div>
-            <form action="/api/auth/logout" method="POST">
-              <button
-                type="submit"
-                className="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-700/50 transition-colors"
-                title="Deconnexion"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </form>
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-700/50 transition-colors"
+              title="Déconnexion"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </aside>

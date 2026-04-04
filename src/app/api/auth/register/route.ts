@@ -5,7 +5,7 @@ import { cookies } from 'next/headers'
 
 export async function POST(request: NextRequest) {
   try {
-    const { firstName, lastName, email, password, phone, pharmacyName } =
+    const { firstName, lastName, email, password, phone, pharmacyName, country } =
       await request.json()
 
     // Validation
@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
       const pharmacy = await tx.pharmacy.create({
         data: {
           name: pharmacyName.trim(),
+          country: country || 'Sénégal',
           phone: phone || null,
           email: email.toLowerCase().trim(),
         },

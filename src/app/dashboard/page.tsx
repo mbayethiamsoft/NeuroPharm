@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useDashboard } from '@/components/DashboardProvider'
+import Link from 'next/link'
 import {
   ShoppingCart,
   Pill,
@@ -16,9 +17,12 @@ import {
 interface DashboardStats {
   salesToday: number
   salesAmount: number
+  salesYesterday: number
+  salesAmountYesterday: number
   totalMedications: number
   lowStockCount: number
   monthlyRevenue: number
+  lastMonthRevenue: number
   recentSales: Array<{
     id: string
     total: number
@@ -34,40 +38,71 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    async function fetchStats() {
-      try {
-        const [salesRes, stockRes] = await Promise.all([
-          fetch('/api/sales?limit=5'),
-          fetch('/api/stock'),
-        ])
-        const salesData = await salesRes.json()
-        const stockData = await stockRes.json()
+  const fetchStats = useCallback(async () => {
+    try {
+      const [salesRes, stockRes] = await Promise.all([
+        fetch('/api/sales?limit=10'),
+        fetch('/api/stock'),
+      ])
+      const salesData = await salesRes.json()
+      const stockData = await stockRes.json()
 
-        const today = new Date().toISOString().split('T')[0]
-        const todaySales = salesData.sales?.filter((s: { createdAt: string }) =>
-          s.createdAt.startsWith(today)
-        ) || []
+      const now = new Date()
+      const today = now.toISOString().split('T')[0]
+      const yesterday = new Date(now.getTime() - 86400000).toISOString().split('T')[0]
+      const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+      const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+      const lastMonth = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, '0')}`
 
-        setStats({
-          salesToday: todaySales.length,
-          salesAmount: todaySales.reduce((sum: number, s: { total: number }) => sum + s.total, 0),
-          totalMedications: stockData.stats?.totalProducts || 0,
-          lowStockCount: stockData.stats?.lowStock || 0,
-          monthlyRevenue: salesData.sales?.reduce((sum: number, s: { total: number }) => sum + s.total, 0) || 0,
-          recentSales: salesData.sales || [],
-        })
-      } catch (error) {
-        console.error('Failed to fetch stats:', error)
-      } finally {
-        setLoading(false)
-      }
+      const allSales = salesData.sales || []
+      const todaySales = allSales.filter((s: { createdAt: string }) => s.createdAt.startsWith(today))
+      const yesterdaySales = allSales.filter((s: { createdAt: string }) => s.createdAt.startsWith(yesterday))
+      const thisMonthSales = allSales.filter((s: { createdAt: string }) => s.createdAt.startsWith(thisMonth))
+      const lastMonthSales = allSales.filter((s: { createdAt: string }) => s.createdAt.startsWith(lastMonth))
+
+      setStats({
+        salesToday: todaySales.length,
+        salesAmount: todaySales.reduce((sum: number, s: { total: number }) => sum + s.total, 0),
+        salesYesterday: yesterdaySales.length,
+        salesAmountYesterday: yesterdaySales.reduce((sum: number, s: { total: number }) => sum + s.total, 0),
+        totalMedications: stockData.stats?.totalProducts || 0,
+        lowStockCount: stockData.stats?.lowStock || 0,
+        monthlyRevenue: thisMonthSales.reduce((sum: number, s: { total: number }) => sum + s.total, 0),
+        lastMonthRevenue: lastMonthSales.reduce((sum: number, s: { total: number }) => sum + s.total, 0),
+        recentSales: allSales.slice(0, 5),
+      })
+    } catch (error) {
+      console.error('Failed to fetch stats:', error)
+    } finally {
+      setLoading(false)
     }
-    fetchStats()
   }, [])
+
+  useEffect(() => {
+    fetchStats()
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(fetchStats, 30000)
+    return () => clearInterval(interval)
+  }, [fetchStats])
+
+  // Listen for custom sale event to refresh immediately
+  useEffect(() => {
+    const handleSaleComplete = () => fetchStats()
+    window.addEventListener('neuropharm:sale-complete', handleSaleComplete)
+    return () => window.removeEventListener('neuropharm:sale-complete', handleSaleComplete)
+  }, [fetchStats])
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF', minimumFractionDigits: 0 }).format(amount)
+
+  const calcTrend = (current: number, previous: number) => {
+    if (previous === 0) return current > 0 ? '+100%' : '0%'
+    const pct = ((current - previous) / previous) * 100
+    return `${pct >= 0 ? '+' : ''}${pct.toFixed(0)}%`
+  }
+
+  const saleTrend = stats ? calcTrend(stats.salesToday, stats.salesYesterday) : ''
+  const revenueTrend = stats ? calcTrend(stats.monthlyRevenue, stats.lastMonthRevenue) : ''
 
   const statCards = [
     {
@@ -75,44 +110,40 @@ export default function DashboardPage() {
       value: stats ? stats.salesToday.toString() : '...',
       subtitle: stats ? formatCurrency(stats.salesAmount) : '',
       icon: ShoppingCart,
-      color: 'from-blue-500 to-blue-600',
       bgColor: 'bg-blue-50',
       textColor: 'text-blue-600',
-      trend: '+12%',
-      trendUp: true,
+      trend: saleTrend,
+      trendUp: stats ? stats.salesToday >= stats.salesYesterday : true,
     },
     {
-      title: 'Medicaments en stock',
+      title: 'Médicaments en stock',
       value: stats ? stats.totalMedications.toString() : '...',
       subtitle: 'produits actifs',
       icon: Pill,
-      color: 'from-emerald-500 to-emerald-600',
       bgColor: 'bg-emerald-50',
       textColor: 'text-emerald-600',
-      trend: '+3',
+      trend: '',
       trendUp: true,
     },
     {
       title: 'Alertes stock bas',
       value: stats ? stats.lowStockCount.toString() : '...',
-      subtitle: 'produits a reapprovisionner',
+      subtitle: 'produits à réapprovisionner',
       icon: AlertTriangle,
-      color: 'from-amber-500 to-orange-500',
       bgColor: 'bg-amber-50',
       textColor: 'text-amber-600',
       trend: stats?.lowStockCount ? `${stats.lowStockCount} alertes` : '',
       trendUp: false,
     },
     {
-      title: 'Chiffre d\'affaires',
+      title: "Chiffre d'affaires",
       value: stats ? formatCurrency(stats.monthlyRevenue) : '...',
       subtitle: 'ce mois',
       icon: TrendingUp,
-      color: 'from-violet-500 to-purple-600',
       bgColor: 'bg-violet-50',
       textColor: 'text-violet-600',
-      trend: '+8%',
-      trendUp: true,
+      trend: revenueTrend,
+      trendUp: stats ? stats.monthlyRevenue >= stats.lastMonthRevenue : true,
     },
   ]
 
@@ -122,10 +153,10 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            Bonjour, {user.firstName} 👋
+            Bonjour, {user.firstName}
           </h1>
           <p className="text-gray-500 mt-1">
-            Voici le resume de votre pharmacie aujourd&apos;hui
+            Voici le résumé de votre pharmacie aujourd&apos;hui
           </p>
         </div>
         <div className="hidden sm:flex items-center gap-2 text-sm text-gray-500">
@@ -168,10 +199,10 @@ export default function DashboardPage() {
         {/* Recent Sales */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm">
           <div className="flex items-center justify-between p-5 border-b border-gray-100">
-            <h3 className="font-semibold text-gray-900">Ventes recentes</h3>
-            <a href="/dashboard/ventes" className="text-sm text-emerald-600 hover:text-emerald-700 font-medium">
+            <h3 className="font-semibold text-gray-900">Ventes récentes</h3>
+            <Link href="/dashboard/ventes" className="text-sm text-emerald-600 hover:text-emerald-700 font-medium">
               Voir tout →
-            </a>
+            </Link>
           </div>
           <div className="p-5">
             {loading ? (
@@ -211,7 +242,7 @@ export default function DashboardPage() {
             ) : (
               <div className="text-center py-8 text-gray-400">
                 <ShoppingCart className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                <p>Aucune vente recente</p>
+                <p>Aucune vente récente</p>
               </div>
             )}
           </div>
@@ -225,18 +256,18 @@ export default function DashboardPage() {
           <div className="p-5 space-y-3">
             {[
               { label: 'Nouvelle vente', href: '/dashboard/ventes', icon: ShoppingCart, color: 'bg-emerald-600 hover:bg-emerald-700' },
-              { label: 'Ajouter medicament', href: '/dashboard/medicaments', icon: Pill, color: 'bg-blue-600 hover:bg-blue-700' },
-              { label: 'Gerer le stock', href: '/dashboard/stock', icon: Package, color: 'bg-amber-600 hover:bg-amber-700' },
+              { label: 'Ajouter médicament', href: '/dashboard/medicaments', icon: Pill, color: 'bg-blue-600 hover:bg-blue-700' },
+              { label: 'Gérer le stock', href: '/dashboard/stock', icon: Package, color: 'bg-amber-600 hover:bg-amber-700' },
               { label: 'Voir les alertes', href: '/dashboard/anomalies', icon: AlertTriangle, color: 'bg-red-600 hover:bg-red-700' },
             ].map((action) => (
-              <a
+              <Link
                 key={action.label}
                 href={action.href}
                 className={`flex items-center gap-3 w-full p-3 rounded-xl text-white text-sm font-medium ${action.color} transition-colors`}
               >
                 <action.icon className="w-4 h-4" />
                 {action.label}
-              </a>
+              </Link>
             ))}
           </div>
 

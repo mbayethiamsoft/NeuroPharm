@@ -26,10 +26,13 @@ export async function GET() {
         pharmacyId: true,
         isActive: true,
         lastLogin: true,
+        createdAt: true,
         pharmacy: {
           select: {
             id: true,
             name: true,
+            city: true,
+            country: true,
             currency: true,
             timezone: true,
             subscription: {

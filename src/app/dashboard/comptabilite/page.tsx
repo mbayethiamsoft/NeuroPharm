@@ -22,7 +22,7 @@ interface Expense {
 const formatCurrency = (n: number) =>
   new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF', minimumFractionDigits: 0 }).format(n)
 
-const expenseCategories = ['loyer', 'services', 'salaires', 'fournitures', 'transport', 'divers']
+const expenseCatégories = ['loyer', 'services', 'salaires', 'fournitures', 'transport', 'divers']
 
 export default function ComptabilitePage() {
   const [tab, setTab] = useState<'summary' | 'expenses'>('summary')
@@ -52,7 +52,7 @@ export default function ComptabilitePage() {
     fetch('/api/accounting').then(r => r.json()).then(setFinancial)
   }
 
-  const maxMonthlyValue = financial ? Math.max(...financial.monthly.map(m => Math.max(m.revenue, m.expenses)), 1) : 1
+  const maxMonthlyValue = financial?.monthly?.length ? Math.max(...financial.monthly.map(m => Math.max(m.revenue, m.expenses)), 1) : 1
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -60,8 +60,8 @@ export default function ComptabilitePage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { title: 'Revenus', value: financial?.totalRevenue || 0, icon: TrendingUp, color: 'bg-emerald-50', textColor: 'text-emerald-600' },
-          { title: 'Depenses', value: financial?.totalExpenses || 0, icon: TrendingDown, color: 'bg-red-50', textColor: 'text-red-600' },
-          { title: 'Benefice net', value: financial?.netProfit || 0, icon: DollarSign, color: 'bg-blue-50', textColor: 'text-blue-600' },
+          { title: 'Dépenses', value: financial?.totalExpenses || 0, icon: TrendingDown, color: 'bg-red-50', textColor: 'text-red-600' },
+          { title: 'Bénéfice net', value: financial?.netProfit || 0, icon: DollarSign, color: 'bg-blue-50', textColor: 'text-blue-600' },
           { title: 'Marge', value: financial?.margin || 0, icon: Percent, color: 'bg-violet-50', textColor: 'text-violet-600', isPercent: true },
         ].map(card => (
           <div key={card.title} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
@@ -79,8 +79,8 @@ export default function ComptabilitePage() {
       {/* Tabs */}
       <div className="flex items-center justify-between">
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-          <button onClick={() => setTab('summary')} className={`px-4 py-2 text-sm font-medium rounded-lg ${tab === 'summary' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>Resume</button>
-          <button onClick={() => setTab('expenses')} className={`px-4 py-2 text-sm font-medium rounded-lg ${tab === 'expenses' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>Depenses</button>
+          <button onClick={() => setTab('summary')} className={`px-4 py-2 text-sm font-medium rounded-lg ${tab === 'summary' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>Résumé</button>
+          <button onClick={() => setTab('expenses')} className={`px-4 py-2 text-sm font-medium rounded-lg ${tab === 'expenses' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>Dépenses</button>
         </div>
         {tab === 'expenses' && (
           <button onClick={() => { setForm({ category: 'divers', description: '', amount: '', date: '' }); setShowModal(true) }}
@@ -92,7 +92,7 @@ export default function ComptabilitePage() {
 
       {tab === 'summary' && financial && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">Evolution mensuelle</h3>
+          <h3 className="font-semibold text-gray-900 mb-4">Évolution mensuelle</h3>
           <div className="space-y-3">
             {financial.monthly.map(m => (
               <div key={m.month} className="flex items-center gap-4">
@@ -117,7 +117,7 @@ export default function ComptabilitePage() {
           </div>
           <div className="flex items-center gap-6 mt-4 text-xs text-gray-500">
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-500" /> Revenus</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-400" /> Depenses</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-400" /> Dépenses</span>
           </div>
         </div>
       )}
@@ -127,13 +127,13 @@ export default function ComptabilitePage() {
           <table className="w-full text-sm">
             <thead><tr className="border-b border-gray-100 bg-gray-50/50">
               <th className="text-left px-4 py-3 font-semibold text-gray-600">Date</th>
-              <th className="text-left px-4 py-3 font-semibold text-gray-600">Categorie</th>
+              <th className="text-left px-4 py-3 font-semibold text-gray-600">Catégorie</th>
               <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Description</th>
               <th className="text-right px-4 py-3 font-semibold text-gray-600">Montant</th>
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
               {expenses.length === 0 ? (
-                <tr><td colSpan={4} className="text-center py-12 text-gray-400">Aucune depense</td></tr>
+                <tr><td colSpan={4} className="text-center py-12 text-gray-400">Aucune dépense</td></tr>
               ) : expenses.map(exp => (
                 <tr key={exp.id} className="hover:bg-gray-50/50">
                   <td className="px-4 py-3 text-gray-500">{new Date(exp.date).toLocaleDateString('fr-FR')}</td>
@@ -151,15 +151,15 @@ export default function ComptabilitePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
-              <h3 className="text-lg font-semibold">Ajouter une depense</h3>
+              <h3 className="text-lg font-semibold">Ajouter une dépense</h3>
               <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-gray-100"><X className="w-5 h-5" /></button>
             </div>
             <form onSubmit={handleAddExpense} className="p-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Categorie</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Catégorie</label>
                 <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40">
-                  {expenseCategories.map(c => <option key={c} value={c} className="capitalize">{c}</option>)}
+                  {expenseCatégories.map(c => <option key={c} value={c} className="capitalize">{c}</option>)}
                 </select>
               </div>
               <div>
