@@ -134,8 +134,74 @@ model User {
   sales       Sale[]
   attendances Attendance[]
   auditLogs   AuditLog[]
+  permissions UserPermission[]
 
   @@map("users")
+}
+
+// ============== RBAC PERMISSIONS ==============
+
+model UserPermission {
+  id         String  @id @default(cuid())
+  userId     String
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  menuKey    String  // e.g. "dashboard", "medications", "stock", "sales", etc.
+  canAccess  Boolean @default(true)
+
+  @@unique([userId, menuKey])
+  @@map("user_permissions")
+}
+
+// ============== SYSTEM LOGS (SuperAdmin) ==============
+
+model SystemLog {
+  id          String   @id @default(cuid())
+  level       String   @default("info")  // info, warning, error, critical
+  action      String   // LOGIN, IMPERSONATE, SUBSCRIPTION_CHANGE, PHARMACY_CREATE, etc.
+  userId      String?
+  userEmail   String?
+  targetId    String?  // target entity ID (pharmacy, user, etc.)
+  targetType  String?  // pharmacy, user, subscription
+  details     String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([level])
+  @@index([action])
+  @@index([createdAt])
+  @@map("system_logs")
+}
+
+// ============== SUPPORT TICKETS ==============
+
+model SupportTicket {
+  id          String   @id @default(cuid())
+  name        String
+  email       String
+  subject     String
+  message     String
+  status      String   @default("open") // open, in_progress, resolved, closed
+  priority    String   @default("normal") // low, normal, high, urgent
+  response    String?
+  respondedAt DateTime?
+  respondedBy String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@map("support_tickets")
+}
+
+// ============== SAAS CONFIG (SuperAdmin) ==============
+
+model SaasConfig {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  value           String
+  description     String?
+  updatedAt       DateTime @updatedAt
+
+  @@map("saas_config")
 }
 
 // ============== MEDICATIONS ==============
@@ -349,20 +415,54 @@ model Expense {
 }
 
 model Payroll {
-  id          String   @id @default(cuid())
-  pharmacyId  String
-  pharmacy    Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
-  employeeName String
-  baseSalary  Float
-  bonuses     Float    @default(0)
-  deductions  Float    @default(0)
-  netSalary   Float
-  month       Int
-  year        Int
-  status      String   @default("pending") // pending, paid
-  paidAt      DateTime?
-  createdAt   DateTime @default(now())
+  id               String   @id @default(cuid())
+  pharmacyId       String
+  pharmacy         Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  employeeName     String
+  employeeRole     String?     // poste occupé
+  month            Int
+  year             Int
 
+  // Gains
+  baseSalary       Float       // Salaire de base
+  seniority        Float    @default(0) // Prime d'ancienneté
+  transportAllowance Float  @default(0) // Indemnité de transport
+  housingAllowance Float    @default(0) // Indemnité de logement
+  bonuses          Float    @default(0) // Primes diverses
+  overtime         Float    @default(0) // Heures supplémentaires
+  grossSalary      Float       // Salaire brut (calculé)
+
+  // Retenues salariales (part employé)
+  ipresGeneral     Float    @default(0) // IPRES régime général 5.6%
+  ipresCadre       Float    @default(0) // IPRES régime cadre 2.4% (si cadre)
+  cssAccident      Float    @default(0) // CSS cotisation AT (pas d'employé, mais réservé)
+  cssMaladie       Float    @default(0) // CSS maladie
+  incomeTax        Float    @default(0) // IR (Impôt sur le Revenu) - barème progressif
+  trimf            Float    @default(0) // TRIMF (Taxe Représentative de l'Impôt du Minimum Fiscal)
+  cfce             Float    @default(0) // CFCE (Contribution Forfaitaire à la Charge de l'Employeur)
+  otherDeductions  Float    @default(0) // Autres retenues
+
+  // Charges patronales (pour info bulletin)
+  employerIpres    Float    @default(0) // IPRES patronal 8.4%
+  employerCss      Float    @default(0) // CSS patronal (AT, PF, maladie)
+  employerCfce     Float    @default(0) // CFCE patronale
+
+  // Totaux
+  totalGross       Float       // Total brut
+  totalDeductions  Float       // Total retenues salariales
+  netSalary        Float       // Net à payer
+
+  // Workflow
+  status           String   @default("draft")   // draft, validated, paid
+  validatedBy      String?  // ID du responsable qui a validé
+  validatedAt      DateTime?
+  paidAt           DateTime?
+  notes            String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([pharmacyId, employeeName, month, year])
   @@map("payrolls")
 }
 

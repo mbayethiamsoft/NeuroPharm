@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Pill, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'
+import { Pill, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, MessageSquare } from 'lucide-react'
+import SupportContactModal from '@/components/SupportContactModal'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -12,6 +13,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showSupport, setShowSupport] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -30,6 +32,13 @@ export default function LoginPage() {
       if (!res.ok) {
         setError(data.error || 'Une erreur est survenue')
         return
+      }
+
+      // Store first login flag for personalized dashboard welcome
+      if (data.isFirstLogin) {
+        sessionStorage.setItem('neuropharm-first-login', '1')
+      } else {
+        sessionStorage.setItem('neuropharm-first-login', '0')
       }
 
       router.push('/dashboard')
@@ -76,16 +85,16 @@ export default function LoginPage() {
 
           <div className="max-w-md text-center space-y-6">
             <h2 className="text-2xl font-semibold leading-snug">
-              Gerez votre pharmacie avec efficacite et intelligence
+              Gérez votre pharmacie avec efficacité et intelligence
             </h2>
             <p className="text-emerald-100/80 leading-relaxed">
-              Stock, ventes, comptabilite, personnel — tout centralise dans une plateforme moderne et securisee.
+              Stock, ventes, comptabilité, personnel — tout centralisé dans une plateforme moderne et sécurisée.
             </p>
           </div>
 
           {/* Feature pills */}
           <div className="mt-12 flex flex-wrap gap-3 justify-center max-w-sm">
-            {['Gestion de stock', 'Point de vente', 'Comptabilite', 'Alertes IA'].map((feature) => (
+            {['Gestion de stock', 'Point de vente', 'Comptabilité', 'Alertes IA'].map((feature) => (
               <span
                 key={feature}
                 className="px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full text-sm font-medium border border-white/10"
@@ -109,8 +118,8 @@ export default function LoginPage() {
           </div>
 
           <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-900">Bon retour</h2>
-            <p className="text-gray-500 mt-2">Connectez-vous a votre espace pharmacie</p>
+            <h2 className="text-3xl font-bold text-gray-900">Connexion</h2>
+            <p className="text-gray-500 mt-2">Connectez-vous à votre espace pharmacie</p>
           </div>
 
           {error && (
@@ -190,11 +199,24 @@ export default function LoginPage() {
               href="/register"
               className="text-emerald-600 font-semibold hover:text-emerald-700 transition-colors"
             >
-              Creer une pharmacie
+              Créer une pharmacie
             </Link>
           </p>
+
+          {/* Support link */}
+          <div className="mt-6 text-center">
+            <button
+              onClick={() => setShowSupport(true)}
+              className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-emerald-600 transition-colors"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Contacter le support technique
+            </button>
+          </div>
         </div>
       </div>
+
+      <SupportContactModal isOpen={showSupport} onClose={() => setShowSupport(false)} />
     </div>
   )
 }

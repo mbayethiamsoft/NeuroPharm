@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { cookies } from 'next/headers'
 
 export async function GET() {
   try {
@@ -12,6 +13,11 @@ export async function GET() {
         { status: 401 }
       )
     }
+
+    // Check impersonation state
+    const cookieStore = await cookies()
+    const impersonatingPharmacy = cookieStore.get('neuropharm-impersonating')?.value || null
+    const isImpersonating = !!impersonatingPharmacy
 
     // Fetch fresh user data with pharmacy
     const user = await prisma.user.findUnique({
@@ -54,7 +60,7 @@ export async function GET() {
       )
     }
 
-    return NextResponse.json({ user })
+    return NextResponse.json({ user, isImpersonating, impersonatingPharmacy })
   } catch (error) {
     console.error('Me error:', error)
     return NextResponse.json(

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useDashboard } from '@/components/DashboardProvider'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   ShoppingCart,
   Pill,
@@ -34,9 +35,36 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
-  const { user } = useDashboard()
+  const { user, isImpersonating } = useDashboard()
+  const router = useRouter()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [welcomeMsg, setWelcomeMsg] = useState('')
+
+  // Redirect SuperAdmin to their dedicated dashboard (unless impersonating)
+  useEffect(() => {
+    if (user.role === 'SUPER_ADMIN' && !isImpersonating) {
+      router.replace('/dashboard/superadmin')
+    }
+  }, [user.role, isImpersonating, router])
+
+  // Personalized welcome based on first/returning login
+  useEffect(() => {
+    try {
+      const flag = sessionStorage.getItem('neuropharm-first-login')
+      if (flag === '1') {
+        setWelcomeMsg(`Bienvenue sur NeuroPharm, ${user.firstName} !`)
+      } else if (flag === '0') {
+        setWelcomeMsg(`Bon retour, ${user.firstName} !`)
+      } else {
+        setWelcomeMsg(`Bonjour, ${user.firstName}`)
+      }
+      // Clear after reading so it only shows once
+      sessionStorage.removeItem('neuropharm-first-login')
+    } catch {
+      setWelcomeMsg(`Bonjour, ${user.firstName}`)
+    }
+  }, [user.firstName])
 
   const fetchStats = useCallback(async () => {
     try {
@@ -153,7 +181,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            Bonjour, {user.firstName}
+            {welcomeMsg}
           </h1>
           <p className="text-gray-500 mt-1">
             Voici le résumé de votre pharmacie aujourd&apos;hui

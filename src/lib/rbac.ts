@@ -1,0 +1,53 @@
+/**
+ * RBAC (Role-Based Access Control) configuration
+ * Defines default menu access per role and utilities for permission checks
+ */
+
+// All available menu keys (matching sidebar navigation)
+export const ALL_MENU_KEYS = [
+  'dashboard',
+  'medications',
+  'stock',
+  'sales',
+  'suppliers',
+  'staff',
+  'accounting',
+  'payroll',
+  'anomalies',
+  'notifications',
+  'settings',
+] as const
+
+export type MenuKey = (typeof ALL_MENU_KEYS)[number]
+
+// Default permissions per role
+// ADMIN has full access, other roles have restricted defaults
+export const DEFAULT_PERMISSIONS: Record<string, MenuKey[]> = {
+  ADMIN: [...ALL_MENU_KEYS],
+  PHARMACIST: ['dashboard'],
+  CASHIER: ['dashboard', 'sales', 'stock'],
+  ACCOUNTANT: ['dashboard', 'accounting', 'payroll'],
+}
+
+// Menu labels (for admin permission UI)
+export const MENU_LABELS: Record<MenuKey, { fr: string; en: string }> = {
+  dashboard: { fr: 'Tableau de bord', en: 'Dashboard' },
+  medications: { fr: 'Médicaments', en: 'Medications' },
+  stock: { fr: 'Gestion du Stock', en: 'Stock Management' },
+  sales: { fr: 'Point de Vente', en: 'Point of Sale' },
+  suppliers: { fr: 'Fournisseurs', en: 'Suppliers' },
+  staff: { fr: 'Personnel', en: 'Staff' },
+  accounting: { fr: 'Comptabilité', en: 'Accounting' },
+  payroll: { fr: 'Paie', en: 'Payroll' },
+  anomalies: { fr: 'Anomalies', en: 'Anomalies' },
+  notifications: { fr: 'Notifications', en: 'Notifications' },
+  settings: { fr: 'Paramètres', en: 'Settings' },
+}
+
+/**
+ * Check if a role has access to a menu by default
+ */
+export function hasDefaultAccess(role: string, menuKey: string): boolean {
+  if (role === 'SUPER_ADMIN' || role === 'ADMIN') return true
+  return DEFAULT_PERMISSIONS[role]?.includes(menuKey as MenuKey) ?? false
+}

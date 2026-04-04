@@ -42,6 +42,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if first login before updating
+    const isFirstLogin = !user.lastLogin
+
     // Update last login
     await prisma.user.update({
       where: { id: user.id },
@@ -84,7 +87,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       user: sessionUser,
-      message: 'Connexion reussie',
+      isFirstLogin,
+      message: 'Connexion réussie',
     })
   } catch (error) {
     console.error('Login error:', error)

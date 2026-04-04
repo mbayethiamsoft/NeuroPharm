@@ -1,7 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
-  <rect width="192" height="192" rx="40" fill="#059669"/>
-  <g transform="translate(96,96)">
-    <rect x="-12" y="-40" width="24" height="80" rx="12" fill="white"/>
-    <rect x="-40" y="-12" width="80" height="24" rx="12" fill="white"/>
+  <!-- Background with emerald gradient -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#059669"/>
+      <stop offset="100%" style="stop-color:#0d9488"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="42" fill="url(#bg)"/>
+  <!-- Pill capsule icon (matches Sidebar/Header logo) -->
+  <g transform="translate(96,88)">
+    <!-- Pill body -->
+    <rect x="-16" y="-44" width="32" height="88" rx="16" fill="white" opacity="0.95"/>
+    <!-- Pill divider -->
+    <line x1="-16" y1="0" x2="16" y2="0" stroke="#059669" stroke-width="2" opacity="0.3"/>
+    <!-- Pill shine -->
+    <rect x="-10" y="-38" width="8" height="30" rx="4" fill="white" opacity="0.3"/>
   </g>
+  <!-- NP text -->
+  <text x="96" y="162" text-anchor="middle" font-family="Arial,sans-serif" font-weight="bold" font-size="22" fill="white" opacity="0.9">NP</text>
 </svg>

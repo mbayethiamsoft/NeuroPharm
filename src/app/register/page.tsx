@@ -15,7 +15,9 @@ import {
   Phone,
   Building2,
   Globe,
+  MessageSquare,
 } from 'lucide-react'
+import SupportContactModal from '@/components/SupportContactModal'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -31,6 +33,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showSupport, setShowSupport] = useState(false)
 
   const updateField = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -340,8 +343,21 @@ export default function RegisterPage() {
               Se connecter
             </Link>
           </p>
+
+          {/* Support link */}
+          <div className="mt-6 text-center">
+            <button
+              onClick={() => setShowSupport(true)}
+              className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-emerald-600 transition-colors"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Contacter le support technique
+            </button>
+          </div>
         </div>
       </div>
+
+      <SupportContactModal isOpen={showSupport} onClose={() => setShowSupport(false)} />
     </div>
   )
 }

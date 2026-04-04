@@ -3,8 +3,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Bell, Search, Menu, ChevronDown, LogOut, Settings, User, X, Check } from 'lucide-react'
+import { Bell, Search, Menu, ChevronDown, LogOut, Settings, User, X, Check, Globe } from 'lucide-react'
 import { useDashboard } from './DashboardProvider'
+import { useI18n } from './I18nProvider'
+import { locales, localeNames, type Locale } from '@/lib/i18n'
 
 const pageTitles: Record<string, string> = {
   '/dashboard': 'Tableau de bord',
@@ -19,6 +21,14 @@ const pageTitles: Record<string, string> = {
   '/dashboard/parametres': 'Paramètres',
   '/dashboard/profil': 'Mon Profil',
   '/dashboard/paie': 'Gestion de la Paie',
+  '/dashboard/permissions': 'Permissions',
+  '/dashboard/superadmin': 'Tableau de bord SaaS',
+  '/dashboard/superadmin/pharmacies': 'Gestion des pharmacies',
+  '/dashboard/superadmin/utilisateurs': 'Gestion des utilisateurs',
+  '/dashboard/superadmin/abonnements': 'Abonnements & Paiements',
+  '/dashboard/superadmin/logs': 'Logs système',
+  '/dashboard/superadmin/support': 'Support',
+  '/dashboard/superadmin/parametres': 'Paramètres SaaS',
 }
 
 interface NotificationItem {
@@ -50,8 +60,10 @@ export default function Header() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, toggleSidebar } = useDashboard()
+  const { locale, t, setLocale } = useI18n()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
+  const [langOpen, setLangOpen] = useState(false)
   const [searchFocused, setSearchFocused] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
@@ -60,8 +72,23 @@ export default function Header() {
   const dropdownRef = useRef<HTMLDivElement>(null)
   const notifRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
+  const langRef = useRef<HTMLDivElement>(null)
 
-  const pageTitle = pageTitles[pathname] || 'Tableau de bord'
+  const pageTitlesI18n: Record<string, string> = {
+    '/dashboard': t.nav.dashboard,
+    '/dashboard/medicaments': t.nav.medications,
+    '/dashboard/stock': t.nav.stock,
+    '/dashboard/ventes': t.nav.sales,
+    '/dashboard/fournisseurs': t.nav.suppliers,
+    '/dashboard/personnel': t.nav.staff,
+    '/dashboard/comptabilite': t.nav.accounting,
+    '/dashboard/anomalies': t.nav.anomalies,
+    '/dashboard/notifications': t.nav.notifications,
+    '/dashboard/parametres': t.nav.settings,
+    '/dashboard/profil': t.nav.profile,
+    '/dashboard/paie': t.nav.payroll,
+  }
+  const pageTitle = pageTitlesI18n[pathname] || pageTitles[pathname] || t.nav.dashboard
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
@@ -92,6 +119,9 @@ export default function Header() {
       }
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
         setSearchFocused(false)
+      }
+      if (langRef.current && !langRef.current.contains(event.target as Node)) {
+        setLangOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -289,6 +319,34 @@ export default function Header() {
             )}
           </div>
 
+          {/* Language switcher */}
+          <div className="relative" ref={langRef}>
+            <button
+              onClick={() => setLangOpen(!langOpen)}
+              className="flex items-center gap-1.5 p-2.5 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              title={t.common.language}
+            >
+              <Globe className="w-4 h-4" />
+              <span className="text-xs font-medium uppercase hidden sm:inline">{locale}</span>
+            </button>
+            {langOpen && (
+              <div className="absolute right-0 mt-2 w-36 bg-white rounded-xl shadow-lg shadow-slate-200/50 border border-slate-200/60 py-1 z-50">
+                {locales.map(l => (
+                  <button
+                    key={l}
+                    onClick={() => { setLocale(l); setLangOpen(false) }}
+                    className={`flex items-center gap-2 w-full px-4 py-2 text-sm transition-colors ${
+                      locale === l ? 'text-emerald-700 bg-emerald-50 font-medium' : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {locale === l && <Check className="w-3.5 h-3.5" />}
+                    <span className={locale !== l ? 'ml-5.5' : ''}>{localeNames[l]}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* User dropdown */}
           <div className="relative" ref={dropdownRef}>
             <button
@@ -330,7 +388,7 @@ export default function Header() {
                     className="flex items-center gap-3 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                   >
                     <User className="w-4 h-4" />
-                    Mon profil
+                    {t.nav.profile}
                   </Link>
                   <Link
                     href="/dashboard/parametres"
@@ -338,7 +396,7 @@ export default function Header() {
                     className="flex items-center gap-3 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                   >
                     <Settings className="w-4 h-4" />
-                    Paramètres
+                    {t.nav.settings}
                   </Link>
                 </div>
                 <div className="border-t border-slate-100 pt-1">
@@ -348,7 +406,7 @@ export default function Header() {
                     className="flex items-center gap-3 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
                   >
                     <LogOut className="w-4 h-4" />
-                    {loggingOut ? 'Déconnexion...' : 'Déconnexion'}
+                    {loggingOut ? t.auth.loggingOut : t.auth.logout}
                   </button>
                 </div>
               </div>
