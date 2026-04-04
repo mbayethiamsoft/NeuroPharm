@@ -113,7 +113,7 @@ export default function FournisseursPage() {
               {[
                 { label: 'Nom *', key: 'name', required: true },
                 { label: 'Contact', key: 'contact' },
-                { label: 'Telephone', key: 'phone' },
+                { label: 'Téléphone', key: 'phone' },
                 { label: 'Email', key: 'email', type: 'email' },
                 { label: 'Adresse', key: 'address' },
               ].map(f => (

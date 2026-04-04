@@ -14,6 +14,7 @@ import {
   User,
   Phone,
   Building2,
+  Globe,
 } from 'lucide-react'
 
 export default function RegisterPage() {
@@ -25,6 +26,7 @@ export default function RegisterPage() {
     password: '',
     phone: '',
     pharmacyName: '',
+    country: 'Sénégal',
   })
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
@@ -40,7 +42,7 @@ export default function RegisterPage() {
     setLoading(true)
 
     if (form.password.length < 6) {
-      setError('Le mot de passe doit contenir au moins 6 caracteres')
+      setError('Le mot de passe doit contenir au moins 6 caractères')
       setLoading(false)
       return
     }
@@ -103,20 +105,20 @@ export default function RegisterPage() {
 
           <div className="max-w-md text-center space-y-6">
             <h2 className="text-2xl font-semibold leading-snug">
-              Lancez votre pharmacie numerique en quelques minutes
+              Lancez votre pharmacie numérique en quelques minutes
             </h2>
             <p className="text-emerald-100/80 leading-relaxed">
-              Essai gratuit de 14 jours. Aucune carte bancaire requise. Commencez a gerer votre pharmacie des aujourd&apos;hui.
+              Essai gratuit de 14 jours. Aucune carte bancaire requise. Commencez à gérer votre pharmacie dès aujourd&apos;hui.
             </p>
           </div>
 
           {/* Benefits */}
           <div className="mt-12 space-y-4 max-w-sm w-full">
             {[
-              'Configuration instantanee de votre pharmacie',
+              'Configuration instantanée de votre pharmacie',
               'Importation facile de votre catalogue',
               'Support technique disponible 24/7',
-              'Donnees securisees et sauvegardees',
+              'Données sécurisées et sauvegardées',
             ].map((benefit) => (
               <div key={benefit} className="flex items-center gap-3">
                 <div className="w-6 h-6 rounded-full bg-emerald-400/20 border border-emerald-400/30 flex items-center justify-center flex-shrink-0">
@@ -141,7 +143,7 @@ export default function RegisterPage() {
           </div>
 
           <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-900">Creer un compte</h2>
+            <h2 className="text-3xl font-bold text-gray-900">Créer un compte</h2>
             <p className="text-gray-500 mt-2">Inscrivez-vous et configurez votre pharmacie</p>
           </div>
 
@@ -157,7 +159,7 @@ export default function RegisterPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="firstName" className="block text-sm font-semibold text-gray-700 mb-1.5">
-                  Prenom
+                  Prénom
                 </label>
                 <div className="relative">
                   <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -166,7 +168,7 @@ export default function RegisterPage() {
                     type="text"
                     value={form.firstName}
                     onChange={(e) => updateField('firstName', e.target.value)}
-                    placeholder="Prenom"
+                    placeholder="Prénom"
                     required
                     className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all shadow-sm"
                   />
@@ -213,7 +215,7 @@ export default function RegisterPage() {
             {/* Phone */}
             <div>
               <label htmlFor="phone" className="block text-sm font-semibold text-gray-700 mb-1.5">
-                Telephone
+                Téléphone
               </label>
               <div className="relative">
                 <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -247,6 +249,43 @@ export default function RegisterPage() {
               </div>
             </div>
 
+            {/* Country */}
+            <div>
+              <label htmlFor="country" className="block text-sm font-semibold text-gray-700 mb-1.5">
+                Pays
+              </label>
+              <div className="relative">
+                <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <select
+                  id="country"
+                  value={form.country}
+                  onChange={(e) => updateField('country', e.target.value)}
+                  required
+                  className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all shadow-sm appearance-none"
+                >
+                  <optgroup label="Pays UEMOA">
+                    <option value="Sénégal">Sénégal</option>
+                    <option value="Côte d'Ivoire">Côte d&apos;Ivoire</option>
+                    <option value="Mali">Mali</option>
+                    <option value="Burkina Faso">Burkina Faso</option>
+                    <option value="Niger">Niger</option>
+                    <option value="Togo">Togo</option>
+                    <option value="Bénin">Bénin</option>
+                    <option value="Guinée-Bissau">Guinée-Bissau</option>
+                  </optgroup>
+                  <optgroup label="Autres pays africains">
+                    <option value="Guinée">Guinée</option>
+                    <option value="Cameroun">Cameroun</option>
+                    <option value="RD Congo">RD Congo</option>
+                    <option value="Gabon">Gabon</option>
+                    <option value="Congo">Congo</option>
+                    <option value="Tchad">Tchad</option>
+                    <option value="Madagascar">Madagascar</option>
+                  </optgroup>
+                </select>
+              </div>
+            </div>
+
             {/* Password */}
             <div>
               <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-1.5">
@@ -259,7 +298,7 @@ export default function RegisterPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={form.password}
                   onChange={(e) => updateField('password', e.target.value)}
-                  placeholder="Minimum 6 caracteres"
+                  placeholder="Minimum 6 caractères"
                   required
                   minLength={6}
                   className="w-full pl-11 pr-12 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all shadow-sm"
@@ -283,17 +322,17 @@ export default function RegisterPage() {
               {loading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Creation en cours...
+                  Création en cours...
                 </>
               ) : (
-                'Creer mon compte'
+                'Créer mon compte'
               )}
             </button>
           </form>
 
           {/* Login link */}
           <p className="mt-6 text-center text-sm text-gray-500">
-            Deja un compte ?{' '}
+            Déjà un compte ?{' '}
             <Link
               href="/login"
               className="text-emerald-600 font-semibold hover:text-emerald-700 transition-colors"

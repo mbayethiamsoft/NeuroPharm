@@ -165,7 +165,7 @@ export default function StockPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/50">
-                    <th className="text-left px-4 py-3 font-semibold text-gray-600">Medicament</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-600">Médicament</th>
                     <th className="text-center px-4 py-3 font-semibold text-gray-600">Stock actuel</th>
                     <th className="text-center px-4 py-3 font-semibold text-gray-600">Stock min</th>
                     <th className="text-right px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Valeur stock</th>
@@ -205,9 +205,9 @@ export default function StockPage() {
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50">
                   <th className="text-left px-4 py-3 font-semibold text-gray-600">Date</th>
-                  <th className="text-left px-4 py-3 font-semibold text-gray-600">Medicament</th>
+                  <th className="text-left px-4 py-3 font-semibold text-gray-600">Médicament</th>
                   <th className="text-center px-4 py-3 font-semibold text-gray-600">Type</th>
-                  <th className="text-center px-4 py-3 font-semibold text-gray-600">Quantite</th>
+                  <th className="text-center px-4 py-3 font-semibold text-gray-600">Quantité</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Reference</th>
                   <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Raison</th>
                 </tr>
@@ -241,7 +241,7 @@ export default function StockPage() {
             </div>
             <form onSubmit={handleAdjust} className="p-5 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Medicament *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Médicament *</label>
                 <select required value={adjustForm.medicationId} onChange={e => setAdjustForm(f => ({ ...f, medicationId: e.target.value }))}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40">
                   <option value="">Selectionner</option>
@@ -260,7 +260,7 @@ export default function StockPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Quantite *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Quantité *</label>
                 <input type="number" required min="1" value={adjustForm.quantity} onChange={e => setAdjustForm(f => ({ ...f, quantity: e.target.value }))}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
               </div>

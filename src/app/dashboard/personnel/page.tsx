@@ -94,8 +94,8 @@ export default function PersonnelPage() {
     <div className="space-y-4 animate-fade-in">
       <div className="flex items-center justify-between">
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-          <button onClick={() => setTab('employees')} className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === 'employees' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>Employes</button>
-          <button onClick={() => setTab('attendance')} className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === 'attendance' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>Presences</button>
+          <button onClick={() => setTab('employees')} className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === 'employees' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>Employés</button>
+          <button onClick={() => setTab('attendance')} className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === 'attendance' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>Présences</button>
         </div>
         <div className="flex gap-2">
           {tab === 'attendance' && (
@@ -124,7 +124,7 @@ export default function PersonnelPage() {
               <th className="text-left px-4 py-3 font-semibold text-gray-600">Employe</th>
               <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Email</th>
               <th className="text-center px-4 py-3 font-semibold text-gray-600">Role</th>
-              <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Telephone</th>
+              <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Téléphone</th>
               <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden lg:table-cell">Derniere connexion</th>
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
@@ -200,7 +200,7 @@ export default function PersonnelPage() {
             <form onSubmit={handleSubmit} className="p-5 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Prenom *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Prénom *</label>
                   <input required value={form.firstName} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))}
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
                 </div>
@@ -221,7 +221,7 @@ export default function PersonnelPage() {
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Telephone</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
                 <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
               </div>

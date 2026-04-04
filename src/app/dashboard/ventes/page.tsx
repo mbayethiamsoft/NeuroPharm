@@ -116,6 +116,10 @@ export default function VentesPage() {
       setCustomerName('')
       setCustomerPhone('')
       setIsPrescription(false)
+      // Dispatch event for dashboard auto-refresh
+      window.dispatchEvent(new CustomEvent('neuropharm:sale-complete'))
+      // Refresh medication list
+      fetch('/api/medications?limit=20').then(r => r.json()).then(d => setMedications(d.medications || []))
       setTimeout(() => setShowSuccess(false), 3000)
     } catch {
       setError('Erreur de connexion')
@@ -135,7 +139,7 @@ export default function VentesPage() {
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Rechercher un medicament ou scanner un code-barres..."
+            placeholder="Rechercher un médicament ou scanner un code-barres..."
             className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500"
             autoFocus
           />
@@ -183,7 +187,7 @@ export default function VentesPage() {
                   <div key={item.medication.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">{item.medication.name}</p>
-                      <p className="text-xs text-gray-500">{formatCurrency(item.unitPrice)} / unite</p>
+                      <p className="text-xs text-gray-500">{formatCurrency(item.unitPrice)} / unité</p>
                     </div>
                     <div className="flex items-center gap-1">
                       <button onClick={() => updateQty(item.medication.id, -1)} className="p-1 rounded-lg hover:bg-gray-200"><Minus className="w-3 h-3" /></button>
@@ -216,7 +220,7 @@ export default function VentesPage() {
           </div>
           <div>
             <input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
-              placeholder="Telephone" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
+              placeholder="Téléphone" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
           </div>
 
           {/* Payment method */}
@@ -224,7 +228,7 @@ export default function VentesPage() {
             <label className="block text-xs font-medium text-gray-600 mb-2">Mode de paiement</label>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { value: 'CASH', label: 'Especes' },
+                { value: 'CASH', label: 'Espèces' },
                 { value: 'MOBILE_MONEY', label: 'Mobile Money' },
                 { value: 'CARD', label: 'Carte' },
                 { value: 'INSURANCE', label: 'Assurance' },
@@ -294,8 +298,8 @@ export default function VentesPage() {
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-100 flex items-center justify-center">
               <CheckCircle className="w-8 h-8 text-emerald-600" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900">Vente enregistree !</h3>
-            <p className="text-gray-500 mt-2">La vente a ete enregistree avec succes</p>
+            <h3 className="text-xl font-bold text-gray-900">Vente enregistrée !</h3>
+            <p className="text-gray-500 mt-2">La vente a été enregistrée avec succès</p>
             <button onClick={() => setShowSuccess(false)} className="mt-4 px-6 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors">
               <X className="w-4 h-4 inline mr-1" /> Fermer
             </button>

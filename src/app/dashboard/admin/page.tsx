@@ -157,7 +157,7 @@ export default function AdminPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Prenom admin *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Prénom admin *</label>
                   <input required value={form.adminFirstName} onChange={e => setForm(f => ({ ...f, adminFirstName: e.target.value }))}
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
                 </div>

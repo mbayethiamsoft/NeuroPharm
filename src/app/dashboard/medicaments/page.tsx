@@ -151,8 +151,8 @@ export default function MedicamentsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50/50">
-                <th className="text-left px-4 py-3 font-semibold text-gray-600">Medicament</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Categorie</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Médicament</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600 hidden md:table-cell">Catégorie</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-600">Prix achat</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-600">Prix vente</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-600">Stock</th>
@@ -167,7 +167,7 @@ export default function MedicamentsPage() {
               ) : medications.length === 0 ? (
                 <tr><td colSpan={8} className="text-center py-12">
                   <Pill className="w-10 h-10 mx-auto mb-2 text-gray-300" />
-                  <p className="text-gray-400">Aucun medicament trouve</p>
+                  <p className="text-gray-400">Aucun médicament trouvé</p>
                 </td></tr>
               ) : medications.map(med => (
                 <tr key={med.id} className="hover:bg-gray-50/50 transition-colors">
@@ -267,7 +267,7 @@ export default function MedicamentsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Categorie</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Catégorie</label>
                   <select value={form.categoryId} onChange={e => setForm(f => ({ ...f, categoryId: e.target.value }))}
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500">
                     <option value="">Aucune</option>
@@ -285,7 +285,7 @@ export default function MedicamentsPage() {
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantite</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantité</label>
                   <input type="number" value={form.quantity} onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))}
                     className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500" />
                 </div>
