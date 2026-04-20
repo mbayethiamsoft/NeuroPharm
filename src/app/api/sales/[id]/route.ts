@@ -99,12 +99,13 @@ export async function PUT(
 
     // Revert stock and update sale in a transaction
     const updatedSale = await prisma.$transaction(async (tx) => {
-      // Restore stock for each item
+      // Restore stock for each item (back to shelf, since that's where the sale came from)
       for (const item of sale.items) {
         await tx.medication.update({
           where: { id: item.medicationId },
           data: {
             quantity: { increment: item.quantity },
+            shelfQuantity: { increment: item.quantity },
           },
         })
 
@@ -114,6 +115,7 @@ export async function PUT(
             pharmacyId: session.pharmacyId!,
             type: 'RETURN',
             quantity: item.quantity,
+            location: 'shelf',
             reason: status === 'cancelled' ? 'Annulation de vente' : 'Remboursement',
             reference: sale.id,
             unitPrice: item.unitPrice,

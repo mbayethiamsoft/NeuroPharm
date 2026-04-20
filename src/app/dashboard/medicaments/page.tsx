@@ -140,9 +140,11 @@ export default function MedicamentsPage() {
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-xl hover:bg-emerald-700 transition-colors shadow-sm">
-          <Plus className="w-4 h-4" /> Ajouter
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={openCreate} className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-xl hover:bg-emerald-700 transition-colors shadow-sm">
+            <Plus className="w-4 h-4" /> Ajouter
+          </button>
+        </div>
       </div>
 
       {/* Table */}
@@ -179,13 +181,13 @@ export default function MedicamentsPage() {
                   <td className="px-4 py-3 hidden md:table-cell">
                     {med.category ? (
                       <span className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-full">{med.category.name}</span>
-                    ) : <span className="text-gray-400">-</span>}
+                    ) : <span className="text-gray-400">—</span>}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-600">{formatCurrency(med.purchasePrice)}</td>
                   <td className="px-4 py-3 text-right font-medium text-gray-900">{formatCurrency(med.sellingPrice)}</td>
                   <td className="px-4 py-3 text-center font-medium">{med.quantity}</td>
                   <td className={`px-4 py-3 text-center hidden lg:table-cell ${getExpiryColor(med.expiryDate)}`}>
-                    {med.expiryDate ? new Date(med.expiryDate).toLocaleDateString('fr-FR') : '-'}
+                    {med.expiryDate ? new Date(med.expiryDate).toLocaleDateString('fr-FR') : '—'}
                   </td>
                   <td className="px-4 py-3 text-center">{getStockBadge(med)}</td>
                   <td className="px-4 py-3 text-right">

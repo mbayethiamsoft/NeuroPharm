@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getSession } from '@/lib/auth'
+import { getSuperAdminSession } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await getSession()
+    const session = await getSuperAdminSession()
     if (session?.role !== 'SUPER_ADMIN') {
       return NextResponse.json({ error: 'Accès refusé' }, { status: 403 })
     }

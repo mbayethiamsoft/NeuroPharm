@@ -13,33 +13,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const alert = searchParams.get('alert')
     const search = searchParams.get('search')
+    const location = searchParams.get('location') // 'warehouse' | 'shelf' | null
 
     const now = new Date()
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
 
-    // Build where clause
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const where: any = {
-      pharmacyId: session.pharmacyId,
-      isActive: true,
-    }
-
-    if (search) {
-      where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { genericName: { contains: search, mode: 'insensitive' } },
-        { barcode: { contains: search, mode: 'insensitive' } },
-      ]
-    }
-
-    if (alert === 'low') {
-      where.quantity = { lte: prisma.medication.fields.minStock }
-      // Use raw comparison: quantity <= minStock
-    } else if (alert === 'expiring') {
-      where.expiryDate = { lte: thirtyDaysFromNow, gte: now }
-    }
-
-    // Fetch all medications for the pharmacy
     const medications = await prisma.medication.findMany({
       where: {
         pharmacyId: session.pharmacyId,
@@ -60,8 +38,9 @@ export async function GET(request: NextRequest) {
       orderBy: { name: 'asc' },
     })
 
-    // Compute status and filter based on alert
+    // Compute status + warehouseQuantity
     const enriched = medications.map((med) => {
+      const warehouseQuantity = med.quantity - med.shelfQuantity
       let status: 'ok' | 'low' | 'critical' | 'expired' | 'expiring' = 'ok'
 
       if (med.quantity <= 0) {
@@ -78,21 +57,29 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      return { ...med, status }
+      return { ...med, warehouseQuantity, status }
     })
 
-    // Filter based on alert type
+    // Filter based on alert / location
     let filtered = enriched
     if (alert === 'low') {
-      filtered = enriched.filter((m) => m.status === 'low' || m.status === 'critical')
+      filtered = filtered.filter((m) => m.status === 'low' || m.status === 'critical')
     } else if (alert === 'expiring') {
-      filtered = enriched.filter((m) => m.status === 'expiring' || m.status === 'expired')
+      filtered = filtered.filter((m) => m.status === 'expiring' || m.status === 'expired')
+    }
+    if (location === 'warehouse') {
+      filtered = filtered.filter((m) => m.warehouseQuantity > 0)
+    } else if (location === 'shelf') {
+      filtered = filtered.filter((m) => m.shelfQuantity > 0)
     }
 
     // Stats
     const totalProducts = medications.length
     const lowStock = enriched.filter((m) => m.status === 'low' || m.status === 'critical').length
     const expiringSoon = enriched.filter((m) => m.status === 'expiring' || m.status === 'expired').length
+    const totalWarehouse = enriched.reduce((sum, m) => sum + m.warehouseQuantity, 0)
+    const totalShelf = enriched.reduce((sum, m) => sum + m.shelfQuantity, 0)
+    const awaitingTransfer = enriched.filter((m) => m.warehouseQuantity > 0 && m.shelfQuantity === 0).length
 
     return NextResponse.json({
       medications: filtered,
@@ -100,6 +87,9 @@ export async function GET(request: NextRequest) {
         totalProducts,
         lowStock,
         expiringSoon,
+        totalWarehouse,
+        totalShelf,
+        awaitingTransfer,
       },
     })
   } catch (error) {
@@ -117,6 +107,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { medicationId, type, quantity, reason } = body
+    const rawLocation = body.location
+    const location: 'warehouse' | 'shelf' =
+      rawLocation === 'shelf' ? 'shelf' : 'warehouse'
 
     if (!medicationId || !type || !quantity) {
       return NextResponse.json(
@@ -133,7 +126,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify medication belongs to the pharmacy
     const medication = await prisma.medication.findFirst({
       where: { id: medicationId, pharmacyId: session.pharmacyId },
     })
@@ -145,47 +137,74 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Calculate new quantity
+    const absQty = Math.abs(parseInt(quantity))
+    const warehouseQty = medication.quantity - medication.shelfQuantity
+
     let newQuantity = medication.quantity
-    const absQty = Math.abs(quantity)
+    let newShelfQuantity = medication.shelfQuantity
 
     switch (type) {
       case 'IN':
       case 'RETURN':
         newQuantity += absQty
+        if (location === 'shelf') newShelfQuantity += absQty
         break
       case 'OUT':
       case 'EXPIRED':
+        if (location === 'shelf') {
+          if (medication.shelfQuantity < absQty) {
+            return NextResponse.json(
+              { error: `Stock en rayon insuffisant (disponible: ${medication.shelfQuantity})` },
+              { status: 400 }
+            )
+          }
+          newShelfQuantity -= absQty
+        } else {
+          if (warehouseQty < absQty) {
+            return NextResponse.json(
+              { error: `Stock en magasin insuffisant (disponible: ${warehouseQty})` },
+              { status: 400 }
+            )
+          }
+        }
         newQuantity -= absQty
+        break
+      case 'ADJUSTMENT': {
+        const delta = parseInt(quantity) // may be negative
+        newQuantity += delta
+        if (location === 'shelf') newShelfQuantity += delta
         if (newQuantity < 0) {
           return NextResponse.json(
-            { error: 'Stock insuffisant' },
+            { error: "L'ajustement rendrait le stock total negatif" },
+            { status: 400 }
+          )
+        }
+        if (newShelfQuantity < 0) {
+          return NextResponse.json(
+            { error: "L'ajustement rendrait le stock en rayon negatif" },
+            { status: 400 }
+          )
+        }
+        if (newShelfQuantity > newQuantity) {
+          return NextResponse.json(
+            { error: "Stock en rayon superieur au total — ajuster le magasin d'abord" },
             { status: 400 }
           )
         }
         break
-      case 'ADJUSTMENT':
-        // Quantity can be positive or negative for adjustments
-        newQuantity += quantity
-        if (newQuantity < 0) {
-          return NextResponse.json(
-            { error: 'L\'ajustement rendrait le stock negatif' },
-            { status: 400 }
-          )
-        }
-        break
+      }
     }
 
     const reference = generateRef('MVT')
 
-    // Transaction: create movement + update stock
     const [movement] = await prisma.$transaction([
       prisma.stockMovement.create({
         data: {
           medicationId,
           pharmacyId: session.pharmacyId,
           type,
-          quantity: type === 'ADJUSTMENT' ? quantity : absQty,
+          quantity: type === 'ADJUSTMENT' ? parseInt(quantity) : absQty,
+          location,
           reason: reason || null,
           reference,
         },
@@ -195,11 +214,10 @@ export async function POST(request: NextRequest) {
       }),
       prisma.medication.update({
         where: { id: medicationId },
-        data: { quantity: newQuantity },
+        data: { quantity: newQuantity, shelfQuantity: newShelfQuantity },
       }),
     ])
 
-    // Audit log
     await createAuditLog({
       pharmacyId: session.pharmacyId,
       userId: session.id,
@@ -210,15 +228,21 @@ export async function POST(request: NextRequest) {
         medicationId,
         medicationName: medication.name,
         type,
+        location,
         quantity,
         previousStock: medication.quantity,
+        previousShelf: medication.shelfQuantity,
         newStock: newQuantity,
+        newShelf: newShelfQuantity,
         reason,
         reference,
       }),
     })
 
-    return NextResponse.json({ movement, newQuantity }, { status: 201 })
+    return NextResponse.json(
+      { movement, newQuantity, newShelfQuantity, warehouseQuantity: newQuantity - newShelfQuantity },
+      { status: 201 }
+    )
   } catch (error) {
     console.error('Stock POST error:', error)
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })

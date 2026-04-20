@@ -141,10 +141,14 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         )
       }
-      if (med.quantity < item.quantity) {
+      if (med.shelfQuantity < item.quantity) {
+        const warehouseQty = med.quantity - med.shelfQuantity
+        const hint = warehouseQty > 0
+          ? ` (${warehouseQty} disponibles en magasin — transferer en rayon d'abord)`
+          : ''
         return NextResponse.json(
           {
-            error: `Stock insuffisant pour "${med.name}". Disponible: ${med.quantity}, Demande: ${item.quantity}`,
+            error: `Stock en rayon insuffisant pour "${med.name}". Rayon: ${med.shelfQuantity}, Demande: ${item.quantity}${hint}`,
           },
           { status: 400 }
         )
@@ -199,6 +203,7 @@ export async function POST(request: NextRequest) {
           where: { id: item.medicationId },
           data: {
             quantity: { decrement: item.quantity },
+            shelfQuantity: { decrement: item.quantity },
           },
         })
 
@@ -208,6 +213,7 @@ export async function POST(request: NextRequest) {
             pharmacyId: session.pharmacyId!,
             type: 'OUT',
             quantity: item.quantity,
+            location: 'shelf',
             reason: 'Vente',
             reference: saleRef,
             unitPrice: item.unitPrice,

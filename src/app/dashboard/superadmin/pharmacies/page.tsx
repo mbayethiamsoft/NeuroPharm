@@ -106,16 +106,16 @@ export default function SAPharmaciesPage() {
       </div>
 
       {/* Stats bar */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm text-center">
+      <div className="flex flex-row gap-4">
+        <div className="flex-1 bg-white rounded-2xl p-4 border border-gray-100 shadow-sm text-center">
           <p className="text-2xl font-bold text-gray-900">{pharmacies.length}</p>
           <p className="text-xs text-gray-500">Total</p>
         </div>
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm text-center">
+        <div className="flex-1 bg-white rounded-2xl p-4 border border-gray-100 shadow-sm text-center">
           <p className="text-2xl font-bold text-emerald-600">{pharmacies.filter(p => p.isActive).length}</p>
           <p className="text-xs text-gray-500">Actives</p>
         </div>
-        <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm text-center">
+        <div className="flex-1 bg-white rounded-2xl p-4 border border-gray-100 shadow-sm text-center">
           <p className="text-2xl font-bold text-red-600">{pharmacies.filter(p => !p.isActive).length}</p>
           <p className="text-xs text-gray-500">Suspendues</p>
         </div>

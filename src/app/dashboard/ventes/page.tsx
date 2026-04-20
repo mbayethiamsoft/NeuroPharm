@@ -7,7 +7,8 @@ interface Medication {
   id: string
   name: string
   sellingPrice: number
-  quantity: number
+  quantity: number        // total (warehouse + shelf)
+  shelfQuantity: number   // sellable portion (rayons)
   barcode: string | null
 }
 
@@ -50,7 +51,7 @@ export default function VentesPage() {
     setCart(prev => {
       const existing = prev.find(i => i.medication.id === med.id)
       if (existing) {
-        if (existing.quantity >= med.quantity) return prev
+        if (existing.quantity >= med.shelfQuantity) return prev
         return prev.map(i =>
           i.medication.id === med.id
             ? { ...i, quantity: i.quantity + 1, total: (i.quantity + 1) * i.unitPrice }
@@ -64,7 +65,7 @@ export default function VentesPage() {
   const updateQty = (medId: string, delta: number) => {
     setCart(prev => prev.map(i => {
       if (i.medication.id !== medId) return i
-      const newQty = Math.max(1, Math.min(i.medication.quantity, i.quantity + delta))
+      const newQty = Math.max(1, Math.min(i.medication.shelfQuantity, i.quantity + delta))
       return { ...i, quantity: newQty, total: newQty * i.unitPrice }
     }))
   }
@@ -147,22 +148,30 @@ export default function VentesPage() {
 
         {/* Products grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 mb-3 overflow-y-auto max-h-48 lg:max-h-64">
-          {medications.map(med => (
-            <button
-              key={med.id}
-              onClick={() => addToCart(med)}
-              disabled={med.quantity <= 0}
-              className={`p-3 rounded-xl border text-left transition-all ${
-                med.quantity <= 0
-                  ? 'bg-gray-50 border-gray-200 opacity-50 cursor-not-allowed'
-                  : 'bg-white border-gray-200 hover:border-emerald-400 hover:shadow-md'
-              }`}
-            >
-              <p className="text-sm font-medium text-gray-900 truncate">{med.name}</p>
-              <p className="text-xs text-emerald-600 font-semibold mt-1">{formatCurrency(med.sellingPrice)}</p>
-              <p className="text-xs text-gray-400">Stock: {med.quantity}</p>
-            </button>
-          ))}
+          {medications.map(med => {
+            const warehouseQty = med.quantity - med.shelfQuantity
+            const unavailable = med.shelfQuantity <= 0
+            return (
+              <button
+                key={med.id}
+                onClick={() => addToCart(med)}
+                disabled={unavailable}
+                title={unavailable && warehouseQty > 0 ? `${warehouseQty} en magasin — transferer en rayon d'abord` : undefined}
+                className={`p-3 rounded-xl border text-left transition-all ${
+                  unavailable
+                    ? 'bg-gray-50 border-gray-200 opacity-50 cursor-not-allowed'
+                    : 'bg-white border-gray-200 hover:border-emerald-400 hover:shadow-md'
+                }`}
+              >
+                <p className="text-sm font-medium text-gray-900 truncate">{med.name}</p>
+                <p className="text-xs text-emerald-600 font-semibold mt-1">{formatCurrency(med.sellingPrice)}</p>
+                <p className="text-xs text-gray-400">Rayon: {med.shelfQuantity}</p>
+                {warehouseQty > 0 && (
+                  <p className="text-[10px] text-indigo-500 mt-0.5">+{warehouseQty} en magasin</p>
+                )}
+              </button>
+            )
+          })}
         </div>
 
         {/* Cart */}

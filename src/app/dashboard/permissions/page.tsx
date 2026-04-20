@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useDashboard } from '@/components/DashboardProvider'
 import { useI18n } from '@/components/I18nProvider'
-import { Loader2, Shield, Save, UserCog } from 'lucide-react'
+import { Loader2, Shield, Save, UserCog, UserCheck } from 'lucide-react'
 import { ALL_MENU_KEYS, MENU_LABELS } from '@/lib/rbac'
 
 interface UserWithPerms {
@@ -30,6 +30,7 @@ export default function PermissionsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [modified, setModified] = useState<Record<string, Record<string, boolean>>>({})
+  const [reactivating, setReactivating] = useState<string | null>(null)
 
   if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
     return (
@@ -103,6 +104,15 @@ export default function PermissionsPage() {
     setSaving(null)
   }
 
+  const handleReactivate = async (userId: string) => {
+    setReactivating(userId)
+    try {
+      await fetch(`/api/personnel/${userId}/toggle`, { method: 'POST' })
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, isActive: true } : u))
+    } catch { /* ignore */ }
+    setReactivating(null)
+  }
+
   const langKey = locale === 'en' ? 'en' : 'fr'
 
   return (
@@ -149,7 +159,21 @@ export default function PermissionsPage() {
                       {u.role}
                     </span>
                     {!u.isActive && (
-                      <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full">Inactif</span>
+                      <>
+                        <span className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full">Inactif</span>
+                        <button
+                          onClick={() => handleReactivate(u.id)}
+                          disabled={reactivating === u.id}
+                          title="Réactiver cet employé"
+                          className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-full hover:bg-emerald-100 disabled:opacity-60 transition-colors"
+                        >
+                          {reactivating === u.id
+                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                            : <UserCheck className="w-3 h-3" />
+                          }
+                          {locale === 'en' ? 'Reactivate' : 'Réactiver'}
+                        </button>
+                      </>
                     )}
                   </div>
                   {hasChanges && (

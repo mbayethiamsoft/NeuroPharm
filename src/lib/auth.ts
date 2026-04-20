@@ -42,6 +42,22 @@ export async function getSession(): Promise<SessionUser | null> {
   return verifyToken(token)
 }
 
+/**
+ * Returns the real SuperAdmin session even during impersonation.
+ * When a SUPER_ADMIN impersonates a pharmacy, the main token is replaced
+ * with an ADMIN token. This function checks the original token first so
+ * superadmin-only API routes remain accessible throughout impersonation.
+ */
+export async function getSuperAdminSession(): Promise<SessionUser | null> {
+  const cookieStore = await cookies()
+  const originalToken = cookieStore.get('neuropharm-original-token')?.value
+  if (originalToken) {
+    const originalSession = verifyToken(originalToken)
+    if (originalSession?.role === 'SUPER_ADMIN') return originalSession
+  }
+  return getSession()
+}
+
 export async function requireAuth(): Promise<SessionUser> {
   const session = await getSession()
   if (!session) redirect('/login')

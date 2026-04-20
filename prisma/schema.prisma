@@ -83,10 +83,11 @@ model Subscription {
   status      SubscriptionStatus @default(ACTIVE)
   startDate   DateTime           @default(now())
   endDate     DateTime?
-  amount      Float              @default(0)
-  payments    Payment[]
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  amount         Float              @default(0)
+  autoPayEnabled Boolean            @default(false)
+  payments       Payment[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
   @@map("subscriptions")
 }
@@ -100,7 +101,13 @@ model Payment {
   provider       String?      // wave, orange_money, etc.
   reference      String?
   status         String       @default("pending") // pending, completed, failed
+  period         String       @default("monthly") // monthly, annual
+  sessionToken   String?      @unique // token Wave QR session
+  expiresAt      DateTime?    // expiry du QR code
   paidAt         DateTime?
+  notes          String?
+  recordedBy     String?      // SuperAdmin email who recorded manual payment
+  type           String       @default("pharmacy_initiated") // pharmacy_initiated, manual, auto
   createdAt      DateTime     @default(now())
 
   @@map("payments")
@@ -233,7 +240,8 @@ model Medication {
   pharmacy     Pharmacy        @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
   purchasePrice Float          @default(0)
   sellingPrice Float           @default(0)
-  quantity     Int             @default(0)
+  quantity     Int             @default(0)  // total stock (warehouse + shelf)
+  shelfQuantity Int            @default(0)  // portion on shelves, sellable
   minStock     Int             @default(10)
   expiryDate   DateTime?
   location     String?         // shelf location
@@ -257,6 +265,7 @@ enum MovementType {
   ADJUSTMENT
   RETURN
   EXPIRED
+  TRANSFER
 }
 
 model StockMovement {
@@ -267,6 +276,7 @@ model StockMovement {
   pharmacy     Pharmacy     @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
   type         MovementType
   quantity     Int
+  location     String?      // "warehouse" | "shelf" — where the movement applies (destination for TRANSFER)
   reason       String?
   reference    String?      // PO number, sale ID, etc.
   unitPrice    Float?

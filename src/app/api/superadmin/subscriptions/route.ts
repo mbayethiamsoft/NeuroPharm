@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getSession } from '@/lib/auth'
+import { getSuperAdminSession } from '@/lib/auth'
 import { createSystemLog } from '@/lib/system-log'
 
 export async function GET() {
   try {
-    const session = await getSession()
+    const session = await getSuperAdminSession()
     if (session?.role !== 'SUPER_ADMIN') {
       return NextResponse.json({ error: 'Accès refusé' }, { status: 403 })
     }
@@ -38,12 +38,12 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const session = await getSession()
+    const session = await getSuperAdminSession()
     if (session?.role !== 'SUPER_ADMIN') {
       return NextResponse.json({ error: 'Accès refusé' }, { status: 403 })
     }
 
-    const { subscriptionId, action, plan, status: newStatus } = await request.json()
+    const { subscriptionId, action, plan, status: newStatus, autoPayEnabled } = await request.json()
 
     if (!subscriptionId) {
       return NextResponse.json({ error: 'subscriptionId requis' }, { status: 400 })
@@ -104,6 +104,25 @@ export async function PUT(request: NextRequest) {
         targetId: subscriptionId,
         targetType: 'subscription',
         details: `${sub.pharmacy.name}: prolongé de ${days} jours`,
+      })
+      return NextResponse.json({ success: true })
+    }
+
+    if (action === 'toggle_autopay') {
+      if (typeof autoPayEnabled !== 'boolean') {
+        return NextResponse.json({ error: 'autoPayEnabled (boolean) requis' }, { status: 400 })
+      }
+      await prisma.subscription.update({
+        where: { id: subscriptionId },
+        data: { autoPayEnabled },
+      })
+      await createSystemLog({
+        action: 'AUTOPAY_TOGGLED',
+        userId: session.id,
+        userEmail: session.email,
+        targetId: subscriptionId,
+        targetType: 'subscription',
+        details: `${sub.pharmacy.name}: auto-paiement ${autoPayEnabled ? 'activé' : 'désactivé'}`,
       })
       return NextResponse.json({ success: true })
     }

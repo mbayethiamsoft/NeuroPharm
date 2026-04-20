@@ -109,6 +109,7 @@ export async function POST(request: NextRequest) {
         purchasePrice: parseFloat(purchasePrice) || 0,
         sellingPrice: parseFloat(sellingPrice) || 0,
         quantity: parseInt(quantity) || 0,
+        shelfQuantity: 0, // new stock lands in warehouse; must be transferred to shelf before sale
         minStock: parseInt(minStock) || 10,
         expiryDate: expiryDate ? new Date(expiryDate) : null,
         location: location || null,
@@ -125,6 +126,7 @@ export async function POST(request: NextRequest) {
           pharmacyId: session.pharmacyId,
           type: 'IN',
           quantity: medication.quantity,
+          location: 'warehouse',
           reason: 'Stock initial',
           unitPrice: medication.purchasePrice,
         },
