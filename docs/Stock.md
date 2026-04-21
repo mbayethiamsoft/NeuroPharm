@@ -288,6 +288,7 @@ PUT { action: "complete" }  →  status: "completed", completedAt: now
 - **Cards de stats** : total produits, total en magasin, total en rayons, stock bas, expirations proches. **Grille figée** : `grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4` (ne pas modifier).
 - **Bannière d'alerte** : si des produits n'ont aucun stock en rayon mais du stock en magasin (`awaitingTransfer`), propose un transfert rapide
 - **Filtre localisation** : `Tous` / `Magasin` / `Rayons`
+- **Filtre statut** (select) : `Tous statuts` / `OK` / `Stock bas` / `Rupture` / `Expire bientôt` / `Expiré`. Un bouton « Réinitialiser » s'affiche quand un statut est sélectionné. Filtrage côté client (basé sur le champ `status` renvoyé par `/api/stock`), cumulatif avec la localisation et la recherche.
 - **Liste** avec colonnes : nom, **Magasin**, **Rayons**, **Total**, stock min, **Prix vente** (quick-édit), **Expiration** (quick-édit), statut, action « Transférer »
 - **Boutons d'action** : `Importer` (CSV fournisseur), `Transferer` (magasin → rayons) et `Ajustement` (mouvement classique)
 

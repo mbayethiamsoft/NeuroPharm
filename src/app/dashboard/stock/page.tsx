@@ -31,6 +31,16 @@ interface StockMovement {
 }
 
 type FilterLocation = 'all' | 'warehouse' | 'shelf'
+type FilterStatus = 'all' | 'ok' | 'low' | 'critical' | 'expiring' | 'expired'
+
+const STATUS_FILTERS: { key: FilterStatus; label: string }[] = [
+  { key: 'all', label: 'Tous statuts' },
+  { key: 'ok', label: 'OK' },
+  { key: 'low', label: 'Stock bas' },
+  { key: 'critical', label: 'Rupture' },
+  { key: 'expiring', label: 'Expire bientôt' },
+  { key: 'expired', label: 'Expiré' },
+]
 
 const formatCurrency = (n: number) =>
   new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF', minimumFractionDigits: 0 }).format(n)
@@ -50,6 +60,7 @@ export default function StockPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterLocation, setFilterLocation] = useState<FilterLocation>('all')
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>('all')
 
   const [showAdjust, setShowAdjust] = useState(false)
   const [showTransfer, setShowTransfer] = useState(false)
@@ -288,8 +299,9 @@ export default function StockPage() {
   }
 
   const visibleMeds = medications.filter(m => {
-    if (filterLocation === 'warehouse') return m.warehouseQuantity > 0
-    if (filterLocation === 'shelf') return m.shelfQuantity > 0
+    if (filterLocation === 'warehouse' && m.warehouseQuantity <= 0) return false
+    if (filterLocation === 'shelf' && m.shelfQuantity <= 0) return false
+    if (filterStatus !== 'all' && m.status !== filterStatus) return false
     return true
   })
 
@@ -408,6 +420,24 @@ export default function StockPage() {
                 </button>
               ))}
             </div>
+            <select
+              value={filterStatus}
+              onChange={e => setFilterStatus(e.target.value as FilterStatus)}
+              className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+            >
+              {STATUS_FILTERS.map(s => (
+                <option key={s.key} value={s.key}>{s.label}</option>
+              ))}
+            </select>
+            {filterStatus !== 'all' && (
+              <button
+                onClick={() => setFilterStatus('all')}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200"
+                title="Réinitialiser le filtre statut"
+              >
+                <X className="w-3 h-3" /> Réinitialiser
+              </button>
+            )}
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
