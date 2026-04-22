@@ -204,9 +204,21 @@ Total      = Sous-total - Remise + TVA
 
 - Affichage : Sous-total → Remise → TVA → **Total**
 - Bouton « Valider la vente » : désactivé si panier vide
-- Modal de succès avec récapitulatif et option d'impression du ticket
+- Modal de succès avec récapitulatif (n° de reçu + total) et bouton **« Imprimer le reçu »**
 
-### 4.5 Événement temps réel
+### 4.5 Impression du reçu
+
+Après une vente réussie, le frontend conserve un objet `Receipt` (état `lastReceipt`) construit à partir de la réponse `POST /api/sales` (id, date, vendeur) et du panier local (lignes, totaux, client, mode de paiement, ordonnance). Les infos pharmacie (nom, adresse, ville, téléphone, email, NINEA) sont récupérées au montage de la page via `GET /api/settings`.
+
+L'impression est **déclenchée manuellement** depuis la modale de succès via le bouton **« Imprimer le reçu »** qui appelle `printReceipt()`. Cette fonction ouvre une fenêtre popup (`window.open`) avec un HTML autonome (police monospace ~320px de large, format ticket de caisse) et déclenche `window.print()` automatiquement à `load` (~200ms après).
+
+> ⚠️ La popup **ne se ferme pas automatiquement** après l'impression (incident historique : sur certains navigateurs `afterprint` se déclenchait avant l'ouverture du dialogue système, refermant la popup avant que l'utilisateur n'ait pu valider). L'utilisateur doit fermer la fenêtre manuellement.
+
+> ⚠️ Si le navigateur bloque les popups, l'utilisateur doit autoriser les popups pour le domaine. Aucun fallback iframe n'est implémenté en v1.
+
+Le reçu inclut : en-tête pharmacie, n° (8 derniers car. de l'`id`), date/heure, vendeur, mode de paiement, bloc client (si renseigné), tableau des lignes (article, qté, PU, total), totaux (sous-total, remise, TVA, total), badge « Vente sur ordonnance » si applicable.
+
+### 4.6 Événement temps réel
 
 Après chaque vente réussie, la page dispatche :
 ```typescript

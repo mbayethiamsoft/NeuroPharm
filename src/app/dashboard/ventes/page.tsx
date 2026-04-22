@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Plus, Minus, Trash2, ShoppingCart, CheckCircle, X, Loader2 } from 'lucide-react'
+import { Search, Plus, Minus, Trash2, ShoppingCart, CheckCircle, X, Loader2, Printer } from 'lucide-react'
 
 interface Medication {
   id: string
@@ -19,8 +19,176 @@ interface CartItem {
   total: number
 }
 
+interface PharmacyInfo {
+  name: string
+  address: string | null
+  city: string | null
+  phone: string | null
+  email: string | null
+  taxId: string | null
+}
+
+interface ReceiptItem {
+  name: string
+  quantity: number
+  unitPrice: number
+  total: number
+}
+
+interface Receipt {
+  id: string
+  createdAt: string
+  subtotal: number
+  discount: number
+  tax: number
+  total: number
+  paymentMethod: string
+  customerName: string | null
+  customerPhone: string | null
+  isPrescription: boolean
+  cashier: string
+  items: ReceiptItem[]
+  pharmacy: PharmacyInfo | null
+}
+
 const formatCurrency = (n: number) =>
   new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF', minimumFractionDigits: 0 }).format(n)
+
+const PAYMENT_LABELS: Record<string, string> = {
+  CASH: 'Espèces',
+  MOBILE_MONEY: 'Mobile Money',
+  CARD: 'Carte bancaire',
+  INSURANCE: 'Assurance',
+  CREDIT: 'Crédit',
+}
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+
+const buildReceiptHtml = (r: Receipt) => {
+  const date = new Date(r.createdAt)
+  const dateStr = date.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+  const shortRef = r.id.slice(-8).toUpperCase()
+  const pharmacy = r.pharmacy
+  const headerLines: string[] = []
+  if (pharmacy) {
+    headerLines.push(`<div class="ph-name">${escapeHtml(pharmacy.name)}</div>`)
+    const addr = [pharmacy.address, pharmacy.city].filter(Boolean).join(', ')
+    if (addr) headerLines.push(`<div>${escapeHtml(addr)}</div>`)
+    if (pharmacy.phone) headerLines.push(`<div>Tél : ${escapeHtml(pharmacy.phone)}</div>`)
+    if (pharmacy.email) headerLines.push(`<div>${escapeHtml(pharmacy.email)}</div>`)
+    if (pharmacy.taxId) headerLines.push(`<div>NINEA : ${escapeHtml(pharmacy.taxId)}</div>`)
+  }
+
+  const itemsRows = r.items.map(i => `
+    <tr>
+      <td class="left">${escapeHtml(i.name)}</td>
+      <td class="center">${i.quantity}</td>
+      <td class="right">${formatCurrency(i.unitPrice)}</td>
+      <td class="right">${formatCurrency(i.total)}</td>
+    </tr>`).join('')
+
+  const customerBlock = (r.customerName || r.customerPhone)
+    ? `<div class="block">
+        <div><strong>Client :</strong> ${escapeHtml(r.customerName || '-')}</div>
+        ${r.customerPhone ? `<div><strong>Téléphone :</strong> ${escapeHtml(r.customerPhone)}</div>` : ''}
+      </div>`
+    : ''
+
+  const discountRow = r.discount > 0
+    ? `<tr><td>Remise</td><td class="right">-${formatCurrency(r.discount)}</td></tr>`
+    : ''
+  const taxRow = r.tax > 0
+    ? `<tr><td>TVA</td><td class="right">${formatCurrency(r.tax)}</td></tr>`
+    : ''
+
+  return `<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Reçu ${shortRef}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Courier New', monospace; color: #111; margin: 0; padding: 16px; font-size: 12px; }
+  .receipt { max-width: 320px; margin: 0 auto; }
+  .header { text-align: center; margin-bottom: 12px; }
+  .ph-name { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  .meta { display: flex; justify-content: space-between; font-size: 11px; margin: 8px 0; }
+  .block { margin: 8px 0; padding: 8px 0; border-top: 1px dashed #999; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 4px 2px; vertical-align: top; }
+  thead th { border-bottom: 1px dashed #999; font-size: 11px; text-align: left; }
+  .center { text-align: center; }
+  .right { text-align: right; }
+  .left { text-align: left; }
+  .totals { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #999; }
+  .totals td { padding: 2px 0; font-size: 12px; }
+  .totals .grand td { font-size: 14px; font-weight: 700; padding-top: 6px; border-top: 1px solid #111; }
+  .footer { margin-top: 16px; text-align: center; font-size: 11px; }
+  .badge { display: inline-block; margin-top: 6px; padding: 2px 8px; border: 1px solid #111; border-radius: 4px; font-size: 10px; }
+  @media print {
+    body { padding: 0; }
+    @page { margin: 8mm; }
+  }
+</style>
+</head>
+<body>
+  <div class="receipt">
+    <div class="header">${headerLines.join('')}</div>
+
+    <div class="meta">
+      <span>Reçu n° ${shortRef}</span>
+      <span>${escapeHtml(dateStr)}</span>
+    </div>
+    <div class="meta">
+      <span>Vendeur : ${escapeHtml(r.cashier)}</span>
+      <span>Paiement : ${escapeHtml(PAYMENT_LABELS[r.paymentMethod] || r.paymentMethod)}</span>
+    </div>
+
+    ${customerBlock}
+
+    <table>
+      <thead>
+        <tr>
+          <th class="left">Article</th>
+          <th class="center">Qté</th>
+          <th class="right">PU</th>
+          <th class="right">Total</th>
+        </tr>
+      </thead>
+      <tbody>${itemsRows}</tbody>
+    </table>
+
+    <table class="totals">
+      <tr><td>Sous-total</td><td class="right">${formatCurrency(r.subtotal)}</td></tr>
+      ${discountRow}
+      ${taxRow}
+      <tr class="grand"><td>Total à payer</td><td class="right">${formatCurrency(r.total)}</td></tr>
+    </table>
+
+    ${r.isPrescription ? '<div class="footer"><span class="badge">Vente sur ordonnance</span></div>' : ''}
+
+    <div class="footer">
+      Merci de votre visite !<br/>
+      Conservez ce reçu pour tout échange.
+    </div>
+  </div>
+  <script>
+    window.addEventListener('load', () => {
+      setTimeout(() => { window.focus(); window.print(); }, 200);
+    });
+  </script>
+</body>
+</html>`
+}
+
+const printReceipt = (receipt: Receipt) => {
+  const w = window.open('', '_blank', 'width=420,height=640')
+  if (!w) return
+  w.document.open()
+  w.document.write(buildReceiptHtml(receipt))
+  w.document.close()
+}
 
 export default function VentesPage() {
   const [medications, setMedications] = useState<Medication[]>([])
@@ -34,6 +202,26 @@ export default function VentesPage() {
   const [submitting, setSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const [error, setError] = useState('')
+  const [pharmacy, setPharmacy] = useState<PharmacyInfo | null>(null)
+  const [lastReceipt, setLastReceipt] = useState<Receipt | null>(null)
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d?.pharmacy) return
+        const p = d.pharmacy
+        setPharmacy({
+          name: p.name,
+          address: p.address ?? null,
+          city: p.city ?? null,
+          phone: p.phone ?? null,
+          email: p.email ?? null,
+          taxId: p.taxId ?? null,
+        })
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (search.length >= 1) {
@@ -111,6 +299,31 @@ export default function VentesPage() {
         return
       }
 
+      const data = await res.json()
+      const sale = data?.sale
+      const receipt: Receipt = {
+        id: sale?.id ?? `local-${Date.now()}`,
+        createdAt: sale?.createdAt ?? new Date().toISOString(),
+        subtotal,
+        discount: discountAmount,
+        tax: sale?.tax ?? 0,
+        total,
+        paymentMethod,
+        customerName: customerName || null,
+        customerPhone: customerPhone || null,
+        isPrescription,
+        cashier: sale?.user
+          ? `${sale.user.firstName ?? ''} ${sale.user.lastName ?? ''}`.trim() || '—'
+          : '—',
+        items: cart.map(i => ({
+          name: i.medication.name,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+          total: i.total,
+        })),
+        pharmacy,
+      }
+      setLastReceipt(receipt)
       setShowSuccess(true)
       setCart([])
       setDiscount(0)
@@ -303,15 +516,32 @@ export default function VentesPage() {
       {/* Success modal */}
       {showSuccess && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl p-8 text-center shadow-xl animate-slide-in">
+          <div className="bg-white rounded-2xl p-8 text-center shadow-xl animate-slide-in max-w-sm">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-100 flex items-center justify-center">
               <CheckCircle className="w-8 h-8 text-emerald-600" />
             </div>
             <h3 className="text-xl font-bold text-gray-900">Vente enregistrée !</h3>
             <p className="text-gray-500 mt-2">La vente a été enregistrée avec succès</p>
-            <button onClick={() => setShowSuccess(false)} className="mt-4 px-6 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors">
-              <X className="w-4 h-4 inline mr-1" /> Fermer
-            </button>
+            {lastReceipt && (
+              <p className="text-xs text-gray-400 mt-1">
+                Reçu n° {lastReceipt.id.slice(-8).toUpperCase()} • {formatCurrency(lastReceipt.total)}
+              </p>
+            )}
+            <div className="mt-5 flex flex-col sm:flex-row gap-2 justify-center">
+              <button
+                onClick={() => lastReceipt && printReceipt(lastReceipt)}
+                disabled={!lastReceipt}
+                className="px-5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <Printer className="w-4 h-4" /> Imprimer le reçu
+              </button>
+              <button
+                onClick={() => setShowSuccess(false)}
+                className="px-5 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors flex items-center justify-center gap-1"
+              >
+                <X className="w-4 h-4" /> Fermer
+              </button>
+            </div>
           </div>
         </div>
       )}
