@@ -35,6 +35,8 @@ interface SaleListRow {
   status: string
   customerName: string | null
   customerPhone: string | null
+  amountPaid: number | null
+  change: number | null
   isPrescription: boolean
   user: { id: string; firstName: string; lastName: string } | null
   _count: { items: number }
@@ -80,6 +82,8 @@ const saleToReceipt = (sale: SaleDetail, pharmacy: ReceiptPharmacy | null): Rece
   paymentMethod: sale.paymentMethod,
   customerName: sale.customerName,
   customerPhone: sale.customerPhone,
+  amountPaid: sale.amountPaid,
+  change: sale.change,
   isPrescription: sale.isPrescription,
   cashier: sale.user
     ? `${sale.user.firstName ?? ''} ${sale.user.lastName ?? ''}`.trim() || '—'
@@ -616,6 +620,18 @@ export default function HistoriquePage() {
                       <span>{t.common.total}</span>
                       <span className="text-emerald-600">{formatCurrency(detailSale.total)}</span>
                     </div>
+                    {detailSale.paymentMethod === 'CASH' && detailSale.amountPaid != null && (
+                      <div className="mt-2 p-2 rounded-lg bg-emerald-50 border border-emerald-200 space-y-1">
+                        <div className="flex justify-between text-xs text-emerald-800">
+                          <span>Espèces reçues</span>
+                          <span className="font-medium">{formatCurrency(detailSale.amountPaid)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm font-bold text-emerald-700">
+                          <span>Monnaie rendue</span>
+                          <span>{formatCurrency(detailSale.change ?? 0)}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : null}

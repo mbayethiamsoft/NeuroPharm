@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Search, Plus, Minus, Trash2, ShoppingCart, CheckCircle, X, Loader2, Printer, UserPlus } from 'lucide-react'
+import { Search, Plus, Minus, Trash2, ShoppingCart, CheckCircle, X, Loader2, Printer, UserPlus, Wallet } from 'lucide-react'
 import {
   printReceipt,
   formatReceiptNumber,
@@ -44,6 +44,7 @@ export default function VentesPage() {
   const [paymentMethod, setPaymentMethod] = useState('CASH')
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
+  const [amountPaidInput, setAmountPaidInput] = useState('')
   const [isPrescription, setIsPrescription] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
@@ -248,10 +249,36 @@ export default function VentesPage() {
   const discountAmount = (subtotal * discount) / 100
   const total = subtotal - discountAmount
 
+  // Cash register: parse the amount handed over and compute the change to return.
+  // Only meaningful for CASH payments; other methods don't use these values.
+  const amountPaidValue = Number(amountPaidInput)
+  const amountPaidParsed =
+    amountPaidInput.trim() !== '' && Number.isFinite(amountPaidValue) && amountPaidValue >= 0
+      ? amountPaidValue
+      : null
+  const changeDue =
+    paymentMethod === 'CASH' && amountPaidParsed !== null
+      ? Math.max(0, amountPaidParsed - total)
+      : 0
+  const cashShort =
+    paymentMethod === 'CASH' &&
+    amountPaidParsed !== null &&
+    amountPaidParsed + 0.009 < total
+
+  // Reset the cash-received field whenever we leave CASH so it doesn't silently
+  // persist across payment-method switches.
+  useEffect(() => {
+    if (paymentMethod !== 'CASH') setAmountPaidInput('')
+  }, [paymentMethod])
+
   const handleSubmit = async () => {
     if (cart.length === 0) return
     if (paymentMethod === 'CREDIT' && !selectedCustomerId) {
       setError('Sélectionnez un client pour une vente à crédit')
+      return
+    }
+    if (paymentMethod === 'CASH' && amountPaidParsed !== null && cashShort) {
+      setError('Montant reçu insuffisant pour couvrir le total')
       return
     }
     setSubmitting(true)
@@ -277,6 +304,7 @@ export default function VentesPage() {
           customerPhone: customerPhone || null,
           customerId: paymentMethod === 'CREDIT' ? selectedCustomerId : null,
           isPrescription,
+          amountPaid: paymentMethod === 'CASH' ? amountPaidParsed : null,
         }),
       })
 
@@ -298,6 +326,8 @@ export default function VentesPage() {
         paymentMethod,
         customerName: customerName || null,
         customerPhone: customerPhone || null,
+        amountPaid: paymentMethod === 'CASH' ? amountPaidParsed : null,
+        change: paymentMethod === 'CASH' && amountPaidParsed !== null ? changeDue : null,
         isPrescription,
         cashier: sale?.user
           ? `${sale.user.firstName ?? ''} ${sale.user.lastName ?? ''}`.trim() || '—'
@@ -318,6 +348,7 @@ export default function VentesPage() {
       setCustomerPhone('')
       setIsPrescription(false)
       setSelectedCustomerId('')
+      setAmountPaidInput('')
       // Refresh customers to update balances after a credit sale
       if (paymentMethod === 'CREDIT') loadCustomers()
       // Dispatch event for dashboard auto-refresh
@@ -419,26 +450,24 @@ export default function VentesPage() {
       </div>
 
       {/* Right: Payment */}
-      <div className="w-full lg:w-80 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col">
-        <div className="p-4 border-b border-gray-100">
-          <h3 className="font-semibold text-gray-900">Paiement</h3>
+      <div className="w-full lg:w-80 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col min-h-0">
+        <div className="px-4 py-2.5 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-900 text-sm">Paiement</h3>
         </div>
-        <div className="p-4 space-y-4 flex-1">
+        <div className="px-3 py-3 space-y-2.5 flex-1 overflow-y-auto min-h-0">
           {/* Customer info */}
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Client (optionnel)</label>
+          <div className="space-y-1.5">
+            <label className="block text-[11px] font-medium text-gray-500">Client (optionnel)</label>
             <input value={customerName} onChange={e => setCustomerName(e.target.value)}
-              placeholder="Nom du client" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
-          </div>
-          <div>
+              placeholder="Nom du client" className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
             <input value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
-              placeholder="Téléphone" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
+              placeholder="Téléphone" className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
           </div>
 
           {/* Payment method */}
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-2">Mode de paiement</label>
-            <div className="grid grid-cols-2 gap-2">
+            <label className="block text-[11px] font-medium text-gray-500 mb-1">Mode de paiement</label>
+            <div className="grid grid-cols-2 gap-1.5">
               {[
                 { value: 'CASH', label: 'Espèces' },
                 { value: 'MOBILE_MONEY', label: 'Mobile Money' },
@@ -447,7 +476,7 @@ export default function VentesPage() {
                 { value: 'CREDIT', label: 'Carnet (crédit)' },
               ].map(pm => (
                 <button key={pm.value} onClick={() => setPaymentMethod(pm.value)}
-                  className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                  className={`px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-colors ${
                     paymentMethod === pm.value
                       ? 'bg-emerald-50 border-emerald-400 text-emerald-700'
                       : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -460,15 +489,15 @@ export default function VentesPage() {
 
           {/* Customer selector (CREDIT only) */}
           {paymentMethod === 'CREDIT' && (
-            <div className="space-y-2 p-3 rounded-lg bg-amber-50 border border-amber-200 min-w-0">
-              <label className="block text-xs font-semibold text-amber-800">
+            <div className="space-y-1.5 p-2 rounded-lg bg-amber-50 border border-amber-200 min-w-0">
+              <label className="block text-[11px] font-semibold text-amber-800">
                 Client (carnet) — obligatoire
               </label>
-              <div className="flex gap-2 min-w-0">
+              <div className="flex gap-1.5 min-w-0">
                 <select
                   value={selectedCustomerId}
                   onChange={(e) => setSelectedCustomerId(e.target.value)}
-                  className="min-w-0 flex-1 px-2 py-2 text-sm border border-amber-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40 truncate"
+                  className="min-w-0 flex-1 px-2 py-1.5 text-xs border border-amber-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40 truncate"
                 >
                   <option value="">— Sélectionner un client —</option>
                   {customers.map((c) => (
@@ -482,25 +511,21 @@ export default function VentesPage() {
                   type="button"
                   onClick={openNewCustomerModal}
                   title="Nouveau client (pré-rempli avec le nom/téléphone saisis)"
-                  className="shrink-0 p-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700"
+                  className="shrink-0 p-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700"
                 >
-                  <UserPlus className="w-4 h-4" />
+                  <UserPlus className="w-3.5 h-3.5" />
                 </button>
               </div>
               {selectedCustomer && (
-                <div className="text-xs text-amber-900 space-y-0.5 min-w-0 break-words">
+                <div className="text-[11px] text-amber-900 space-y-0.5 min-w-0 break-words">
                   <div>
-                    Solde actuel :{' '}
-                    <strong>{formatCurrency(selectedCustomer.balance)}</strong>
+                    Solde : <strong>{formatCurrency(selectedCustomer.balance)}</strong>
                   </div>
                   {selectedCustomer.creditLimit > 0 && (
                     <div>
-                      Plafond :{' '}
-                      <strong>{formatCurrency(selectedCustomer.creditLimit)}</strong>
+                      Plafond : <strong>{formatCurrency(selectedCustomer.creditLimit)}</strong>
                       {selectedCustomer.balance + total > selectedCustomer.creditLimit && (
-                        <div className="text-red-700 font-semibold">
-                          Plafond dépassé !
-                        </div>
+                        <div className="text-red-700 font-semibold">Plafond dépassé !</div>
                       )}
                     </div>
                   )}
@@ -509,47 +534,109 @@ export default function VentesPage() {
             </div>
           )}
 
-          {/* Discount */}
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Remise (%)</label>
-            <input type="number" min="0" max="100" value={discount} onChange={e => setDiscount(Number(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
+          {/* Discount + Prescription (inline) */}
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Remise (%)</label>
+              <input type="number" min="0" max="100" value={discount} onChange={e => setDiscount(Number(e.target.value))}
+                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/40" />
+            </div>
+            <label className="flex items-center gap-1.5 text-xs text-gray-600 pb-1.5 whitespace-nowrap">
+              <input type="checkbox" checked={isPrescription} onChange={e => setIsPrescription(e.target.checked)}
+                className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+              Ordonnance
+            </label>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-gray-600">
-            <input type="checkbox" checked={isPrescription} onChange={e => setIsPrescription(e.target.checked)}
-              className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
-            Sur ordonnance
-          </label>
+          {/* Cash register — CASH only */}
+          {paymentMethod === 'CASH' && (
+            <div className="space-y-1.5 p-2 rounded-lg bg-emerald-50 border border-emerald-200">
+              <label className="flex items-center gap-1 text-[11px] font-semibold text-emerald-800">
+                <Wallet className="w-3 h-3" /> Caisse — espèces reçues
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={amountPaidInput}
+                onChange={(e) => setAmountPaidInput(e.target.value)}
+                placeholder="Montant remis par le client"
+                className="w-full px-2.5 py-1.5 border border-emerald-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              />
+              <div className="flex flex-wrap gap-1">
+                {[1000, 2000, 5000, 10000].map((amount) => (
+                  <button
+                    key={amount}
+                    type="button"
+                    onClick={() => setAmountPaidInput(String(amount))}
+                    className="px-1.5 py-0.5 text-[10px] rounded-md bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                  >
+                    {formatCurrency(amount)}
+                  </button>
+                ))}
+                {total > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setAmountPaidInput(String(Math.round(total)))}
+                    className="px-1.5 py-0.5 text-[10px] rounded-md bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                    title="Compte juste"
+                  >
+                    Exact
+                  </button>
+                )}
+                {amountPaidInput !== '' && (
+                  <button
+                    type="button"
+                    onClick={() => setAmountPaidInput('')}
+                    className="px-1.5 py-0.5 text-[10px] rounded-md bg-white border border-gray-200 text-gray-500 hover:bg-gray-50"
+                  >
+                    Effacer
+                  </button>
+                )}
+              </div>
+              {amountPaidParsed !== null && (
+                cashShort ? (
+                  <div className="p-1.5 rounded-md bg-red-50 border border-red-200 text-[11px] text-red-700 font-medium">
+                    Manque {formatCurrency(total - amountPaidParsed)} pour couvrir le total
+                  </div>
+                ) : (
+                  <div className="flex items-baseline justify-between px-2 py-1 rounded-md bg-white border border-emerald-300">
+                    <span className="text-[11px] font-medium text-emerald-800">Monnaie à rendre</span>
+                    <span className="text-base font-bold text-emerald-700">{formatCurrency(changeDue)}</span>
+                  </div>
+                )
+              )}
+            </div>
+          )}
         </div>
 
         {/* Totals */}
-        <div className="p-4 border-t border-gray-100 space-y-2">
-          <div className="flex justify-between text-sm text-gray-600">
+        <div className="px-3 py-2.5 border-t border-gray-100 space-y-1.5">
+          <div className="flex justify-between text-xs text-gray-600">
             <span>Sous-total</span>
             <span>{formatCurrency(subtotal)}</span>
           </div>
           {discount > 0 && (
-            <div className="flex justify-between text-sm text-red-600">
+            <div className="flex justify-between text-xs text-red-600">
               <span>Remise ({discount}%)</span>
               <span>-{formatCurrency(discountAmount)}</span>
             </div>
           )}
-          <div className="flex justify-between text-lg font-bold text-gray-900 pt-2 border-t border-gray-100">
+          <div className="flex justify-between text-base font-bold text-gray-900 pt-1.5 border-t border-gray-100">
             <span>Total</span>
             <span className="text-emerald-600">{formatCurrency(total)}</span>
           </div>
 
           {error && (
-            <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{error}</div>
+            <div className="p-1.5 bg-red-50 border border-red-200 rounded-lg text-[11px] text-red-700">{error}</div>
           )}
 
           <button
             onClick={handleSubmit}
-            disabled={cart.length === 0 || submitting}
-            className="w-full py-3 bg-emerald-600 text-white font-semibold rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            disabled={cart.length === 0 || submitting || cashShort}
+            className="w-full py-2.5 bg-emerald-600 text-white font-semibold text-sm rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
           >
-            {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
             Valider la vente
           </button>
         </div>
@@ -655,6 +742,21 @@ export default function VentesPage() {
                 Reçu n° {formatReceiptNumber(lastReceipt.id)} • {formatCurrency(lastReceipt.total)}
               </p>
             )}
+            {lastReceipt?.paymentMethod === 'CASH' &&
+              lastReceipt.amountPaid != null &&
+              lastReceipt.change != null &&
+              lastReceipt.change > 0 && (
+                <div className="mt-3 mx-auto max-w-xs p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-left">
+                  <div className="flex justify-between text-xs text-emerald-800">
+                    <span>Espèces reçues</span>
+                    <span className="font-medium">{formatCurrency(lastReceipt.amountPaid)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-emerald-700 font-bold mt-1 pt-1 border-t border-emerald-200">
+                    <span>Monnaie à rendre</span>
+                    <span>{formatCurrency(lastReceipt.change)}</span>
+                  </div>
+                </div>
+              )}
             <div className="mt-5 flex flex-col sm:flex-row gap-2 justify-center">
               <button
                 onClick={() => lastReceipt && printReceipt(lastReceipt)}

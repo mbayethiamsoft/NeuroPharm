@@ -24,6 +24,8 @@ export interface Receipt {
   paymentMethod: string
   customerName: string | null
   customerPhone: string | null
+  amountPaid?: number | null
+  change?: number | null
   isPrescription: boolean
   cashier: string
   items: ReceiptItem[]
@@ -101,6 +103,13 @@ export function buildReceiptHtml(r: Receipt): string {
     r.discount > 0 ? `<tr><td>Remise</td><td class="right">-${formatCurrency(r.discount)}</td></tr>` : ''
   const taxRow = r.tax > 0 ? `<tr><td>TVA</td><td class="right">${formatCurrency(r.tax)}</td></tr>` : ''
 
+  // Cash register block (CASH sales only, when the pharmacist recorded the tender).
+  const cashRows =
+    r.paymentMethod === 'CASH' && r.amountPaid != null
+      ? `<tr><td>Espèces reçues</td><td class="right">${formatCurrency(r.amountPaid)}</td></tr>
+         <tr class="change"><td>Monnaie rendue</td><td class="right">${formatCurrency(r.change ?? 0)}</td></tr>`
+      : ''
+
   const statusBadge =
     r.status && r.status !== 'completed'
       ? `<div class="footer"><span class="badge badge-warn">${escapeHtml(SALE_STATUS_LABELS_FR[r.status] || r.status)}</span></div>`
@@ -133,6 +142,7 @@ export function buildReceiptHtml(r: Receipt): string {
   .totals { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #999; }
   .totals td { padding: 2px 0; font-size: 12px; }
   .totals .grand td { font-size: 14px; font-weight: 700; padding-top: 6px; border-top: 1px solid #111; }
+  .totals .change td { font-weight: 700; padding-top: 4px; }
   .footer { margin-top: 16px; text-align: center; font-size: 11px; }
   .badge { display: inline-block; margin-top: 6px; padding: 2px 8px; border: 1px solid #111; border-radius: 4px; font-size: 10px; }
   .badge-warn { border-color: #b45309; color: #b45309; }
@@ -174,6 +184,7 @@ export function buildReceiptHtml(r: Receipt): string {
       ${discountRow}
       ${taxRow}
       <tr class="grand"><td>Total à payer</td><td class="right">${formatCurrency(r.total)}</td></tr>
+      ${cashRows}
     </table>
 
     ${r.isPrescription ? '<div class="footer"><span class="badge">Vente sur ordonnance</span></div>' : ''}

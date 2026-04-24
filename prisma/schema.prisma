@@ -342,6 +342,8 @@ model Sale {
   paymentMethod PaymentMethod @default(CASH)
   customerName  String?
   customerPhone String?
+  amountPaid    Float?        // espèces reçues (CASH uniquement) — null si non renseigné
+  change        Float?        // monnaie rendue = amountPaid - total (CASH uniquement)
   isPrescription Boolean      @default(false)
   status        String        @default("completed") // completed, refunded, cancelled
   createdAt     DateTime      @default(now())

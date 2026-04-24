@@ -117,6 +117,7 @@ export async function POST(request: NextRequest) {
       customerPhone,
       customerId,
       isPrescription,
+      amountPaid,
     } = body
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -124,6 +125,30 @@ export async function POST(request: NextRequest) {
         { error: 'La vente doit contenir au moins un article' },
         { status: 400 }
       )
+    }
+
+    // Cash register: amountPaid + change are only meaningful for CASH payments.
+    // The client sends amountPaid; the server computes change and validates it
+    // covers the total. Other payment methods always store null.
+    let storedAmountPaid: number | null = null
+    let storedChange: number | null = null
+    if (paymentMethod === 'CASH' && amountPaid !== undefined && amountPaid !== null && amountPaid !== '') {
+      const paid = Number(amountPaid)
+      if (!Number.isFinite(paid) || paid < 0) {
+        return NextResponse.json(
+          { error: 'Montant reçu invalide' },
+          { status: 400 }
+        )
+      }
+      const dueTotal = Number(total) || 0
+      if (paid + 0.009 < dueTotal) {
+        return NextResponse.json(
+          { error: `Montant reçu insuffisant (reçu ${paid.toFixed(0)} XOF, dû ${dueTotal.toFixed(0)} XOF)` },
+          { status: 400 }
+        )
+      }
+      storedAmountPaid = paid
+      storedChange = Math.max(0, paid - dueTotal)
     }
 
     // Credit sales: customerId is required
@@ -224,6 +249,8 @@ export async function POST(request: NextRequest) {
           paymentMethod: paymentMethod || 'CASH',
           customerName: linkedCustomerName ?? (customerName || null),
           customerPhone: linkedCustomerPhone ?? (customerPhone || null),
+          amountPaid: storedAmountPaid,
+          change: storedChange,
           isPrescription: isPrescription || false,
           items: {
             create: items.map(

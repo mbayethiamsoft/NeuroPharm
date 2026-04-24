@@ -47,11 +47,15 @@ model Sale {
   paymentMethod  PaymentMethod @default(CASH)
   customerName   String?       // copie du nom client (snapshot pour ticket)
   customerPhone  String?       // copie du téléphone client (snapshot pour ticket)
+  amountPaid     Float?        // caisse — espèces remises par le client (CASH uniquement)
+  change         Float?        // caisse — monnaie rendue = amountPaid - total (CASH uniquement)
   isPrescription Boolean       @default(false)
   status         String        @default("completed") // completed, refunded, cancelled
   createdAt      DateTime      @default(now())
 }
 ```
+
+> `amountPaid` et `change` ne sont renseignés que pour les ventes en espèces lorsque le caissier a saisi le montant reçu. Ils sont stockés uniquement pour traçabilité et réimpression du ticket — ils **n'entrent pas** dans le calcul du chiffre d'affaires (voir § 8).
 
 ### `SaleItem`
 
@@ -126,9 +130,12 @@ model SaleItem {
   "customerName": "Amadou Diallo",
   "customerPhone": "771234567",
   "customerId": null,              // requis SEULEMENT si paymentMethod=CREDIT
-  "isPrescription": false
+  "isPrescription": false,
+  "amountPaid": 5000               // optionnel — CASH uniquement, ignoré pour les autres méthodes
 }
 ```
+
+> **Caisse (CASH uniquement)** : quand `paymentMethod=CASH` et que `amountPaid` est fourni, le serveur valide que `amountPaid >= total` (erreur 400 sinon), calcule `change = amountPaid - total`, puis persiste les deux valeurs sur la `Sale`. Pour toute autre méthode de paiement ou si `amountPaid` est omis, `amountPaid` et `change` restent `null`.
 
 > ⚠️ Si `paymentMethod=CREDIT`, `customerId` est **obligatoire**. Le serveur valide que le client existe, appartient à la pharmacie, et que la vente ne dépasserait pas son plafond de crédit (si défini). Les champs `customerName` / `customerPhone` du body sont alors **ignorés** : ils sont copiés automatiquement depuis le Customer côté serveur. Voir `docs/Carnet.md`.
 
@@ -148,6 +155,8 @@ total    = subtotal + tax - discount
 | Médicament hors pharmacie | 404 | Médicament introuvable |
 | **Stock en rayon insuffisant** | 400 | `Stock en rayon insuffisant pour "{nom}". Rayon: X, Demande: Y (Z disponibles en magasin — transferer en rayon d'abord)` |
 | Prix négatif | 400 | Prix invalide |
+| `amountPaid` négatif / non numérique (CASH) | 400 | Montant reçu invalide |
+| `amountPaid < total` (CASH) | 400 | `Montant reçu insuffisant (reçu X XOF, dû Y XOF)` |
 
 > ⚠️ La vérification porte sur `shelfQuantity` (stock en rayon) **et non** sur `quantity` (total). Un produit avec du stock uniquement en magasin est non vendable — voir `docs/Stock.md` pour le transfert magasin → rayon.
 
@@ -216,7 +225,21 @@ Quand `paymentMethod=CREDIT`, un sélecteur de client (carnet) obligatoire appar
 2. **Pré-remplissage de la création** : le bouton « + Nouveau client » ouvre la modale pré-remplie avec le nom et le téléphone des champs optionnels.
 3. **Synchronisation retour** : dès qu'un Customer est sélectionné (ou créé), son `fullName` et son `phone` sont recopiés dans les champs optionnels — l'utilisateur voit ainsi quel client est attaché à la vente, et ces valeurs servent au reçu si le serveur ne les écrasait pas (NB : pour CREDIT le serveur copie de toute façon depuis le Customer côté backend, cf. § 3).
 
-### 4.4 Récapitulatif et validation
+### 4.4 Caisse — espèces reçues & monnaie à rendre (CASH)
+
+Quand `paymentMethod=CASH`, un encart vert apparaît au-dessus de la case « Ordonnance » :
+
+- **Champ « Espèces reçues »** : saisie libre du montant remis par le client.
+- **Raccourcis** : boutons 1 000 / 2 000 / 5 000 / 10 000 XOF, plus un bouton **« Exact »** (pré-remplit avec le total arrondi) et **« Effacer »**.
+- **Monnaie à rendre** : calculée et affichée en gros (`amountPaid - total`) dès que la saisie est valide.
+- **Montant insuffisant** : si `amountPaid < total`, un message rouge s'affiche et le bouton « Valider la vente » est **désactivé**. Le serveur rejette aussi la requête (400).
+- **Reset** : le champ est vidé automatiquement quand l'utilisateur quitte le mode CASH et après une vente validée.
+
+Le champ est facultatif : une vente CASH peut être enregistrée sans saisir le montant reçu (rétro-compatible). Dans ce cas `amountPaid` et `change` restent `null` et le ticket n'affiche ni ligne « Espèces reçues » ni ligne « Monnaie rendue ».
+
+> La modale de succès récapitule la monnaie à rendre pour éviter que le caissier ne l'oublie avant la fermeture.
+
+### 4.5 Récapitulatif et validation
 
 - Affichage : Sous-total → Remise → TVA → **Total**
 - Bouton « Valider la vente » : désactivé si panier vide
@@ -224,7 +247,7 @@ Quand `paymentMethod=CREDIT`, un sélecteur de client (carnet) obligatoire appar
 
 > ⚠️ La modale de succès **ne se ferme pas automatiquement** (incident historique : un timeout de 3 s fermait la modale avant que le caissier n'ait eu le temps de cliquer sur « Imprimer le reçu »). L'utilisateur doit cliquer « Fermer » ou « Imprimer le reçu » manuellement.
 
-### 4.5 Impression du reçu
+### 4.6 Impression du reçu
 
 Les helpers d'impression vivent dans `src/lib/receipt.ts` (module partagé entre le POS et l'historique) :
 
@@ -242,9 +265,9 @@ L'impression est **déclenchée manuellement** depuis la modale de succès via l
 
 > ⚠️ Si le navigateur bloque les popups, l'utilisateur doit autoriser les popups pour le domaine. Aucun fallback iframe n'est implémenté en v1.
 
-Le reçu inclut : en-tête pharmacie, n° (8 derniers car. de l'`id`), date/heure, vendeur, mode de paiement, bloc client (si renseigné), tableau des lignes (article, qté, PU, total), totaux (sous-total, remise, TVA, total), badge « Vente sur ordonnance » si applicable.
+Le reçu inclut : en-tête pharmacie, n° (8 derniers car. de l'`id`), date/heure, vendeur, mode de paiement, bloc client (si renseigné), tableau des lignes (article, qté, PU, total), totaux (sous-total, remise, TVA, total), bloc caisse « Espèces reçues » / « Monnaie rendue » (uniquement pour les ventes CASH où `amountPaid` a été saisi), badge « Vente sur ordonnance » si applicable.
 
-### 4.6 Événement temps réel
+### 4.7 Événement temps réel
 
 Après chaque vente réussie, la page dispatche :
 ```typescript
@@ -315,3 +338,15 @@ Affiche en-tête (date, vendeur, paiement, statut, client si présent, badge ord
 5. **Remise** : appliquée avant la TVA dans le calcul serveur (`subtotal × discount%` puis TVA sur `subtotal - discount`).
 6. **Ordonnance** : le flag `isPrescription` est informatif uniquement en v1 — aucun blocage automatique.
 7. **Rôle `CASHIER`** : peut créer des ventes mais ne peut pas accéder à la gestion des médicaments ni au stock (ni effectuer des transferts magasin → rayon).
+
+---
+
+## 8. Caisse et comptabilité
+
+La fonctionnalité **caisse** (champs `Sale.amountPaid` et `Sale.change`) trace le flux physique de liquidités au guichet (espèces remises, monnaie rendue) mais **n'affecte pas** les calculs de `/dashboard/comptabilite` :
+
+- Le chiffre d'affaires reste `sum(Sale.total)` pour les ventes `completed` — la monnaie rendue est neutre (elle sort de la caisse exactement comme elle y est entrée en trop).
+- Aucune `Expense` n'est créée par le rendu de monnaie : ce n'est ni un revenu ni une dépense comptable, uniquement un détail de flux de caisse.
+- Pour auditer une caisse en fin de journée, requêter manuellement `Sale` filtrée par date et `paymentMethod=CASH` : la somme des `total` = encaissement net espèces attendu. Les champs `amountPaid` / `change` servent de justificatif par ticket, pas d'agrégat.
+
+> Si un besoin d'« ouverture / fermeture de caisse » apparaît plus tard (fond de caisse, contrôle du tiroir, écart constaté), il faudra introduire un nouveau modèle dédié (`CashRegisterSession` ou équivalent) plutôt que de détourner `Expense`.
