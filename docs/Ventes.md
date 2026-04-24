@@ -12,9 +12,13 @@ La page `/dashboard/ventes` est le point de vente (POS) de la pharmacie. Elle pe
 
 | Fichier | Rôle |
 |---------|------|
-| `src/app/dashboard/ventes/page.tsx` | Page POS principale |
-| `src/app/api/sales/route.ts` | `GET` (liste) + `POST` (créer vente) |
-| `src/app/api/sales/[id]/route.ts` | `GET` détail vente |
+| `src/app/dashboard/ventes/layout.tsx` | Shell commun avec onglets « Nouvelle vente / Historique / Carnet » |
+| `src/app/dashboard/ventes/page.tsx` | Page POS (onglet « Nouvelle vente ») |
+| `src/app/dashboard/ventes/historique/page.tsx` | Historique des tickets + réimpression |
+| `src/app/dashboard/ventes/carnet/page.tsx` | Carnet (crédit client) — voir `docs/Carnet.md` |
+| `src/lib/receipt.ts` | Module partagé : types `Receipt` + `PaymentReceipt`, builders, labels FR |
+| `src/app/api/sales/route.ts` | `GET` (liste) + `POST` (créer vente, avec validation CREDIT/customerId) |
+| `src/app/api/sales/[id]/route.ts` | `GET` détail vente, `PUT` annulation/remboursement |
 
 ---
 
@@ -35,13 +39,14 @@ model Sale {
   id             String        @id @default(cuid())
   pharmacyId     String
   userId         String        // vendeur
+  customerId     String?       // lien vers Customer (carnet) — obligatoire si paymentMethod=CREDIT
   subtotal       Float
   tax            Float         @default(0)
   discount       Float         @default(0)
   total          Float
   paymentMethod  PaymentMethod @default(CASH)
-  customerName   String?
-  customerPhone  String?
+  customerName   String?       // copie du nom client (snapshot pour ticket)
+  customerPhone  String?       // copie du téléphone client (snapshot pour ticket)
   isPrescription Boolean       @default(false)
   status         String        @default("completed") // completed, refunded, cancelled
   createdAt      DateTime      @default(now())
@@ -75,7 +80,7 @@ model SaleItem {
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `search` | string | Filtre par nom client ou référence |
+| `search` | string | Filtre par nom client, téléphone, **ou n° de reçu** (`id.endsWith`, insensible à la casse) |
 | `status` | string | `completed`, `refunded`, `cancelled` |
 | `startDate` | string | ISO date de début |
 | `endDate` | string | ISO date de fin |
@@ -120,9 +125,12 @@ model SaleItem {
   "discount": 5,
   "customerName": "Amadou Diallo",
   "customerPhone": "771234567",
+  "customerId": null,              // requis SEULEMENT si paymentMethod=CREDIT
   "isPrescription": false
 }
 ```
+
+> ⚠️ Si `paymentMethod=CREDIT`, `customerId` est **obligatoire**. Le serveur valide que le client existe, appartient à la pharmacie, et que la vente ne dépasserait pas son plafond de crédit (si défini). Les champs `customerName` / `customerPhone` du body sont alors **ignorés** : ils sont copiés automatiquement depuis le Customer côté serveur. Voir `docs/Carnet.md`.
 
 **Calcul automatique côté serveur :**
 ```
@@ -196,9 +204,17 @@ Total      = Sous-total - Remise + TVA
 |-------|--------|-------------|
 | Mode de paiement | Oui | CASH / MOBILE_MONEY / CARD / INSURANCE / CREDIT |
 | Remise (%) | Non | Pourcentage de 0 à 100 |
-| Nom client | Non | Pour le ticket |
-| Téléphone client | Non | Pour le ticket |
+| Nom client | Non | Pour le ticket (réutilisé en CREDIT — voir ci-dessous) |
+| Téléphone client | Non | Pour le ticket (réutilisé en CREDIT — voir ci-dessous) |
 | Vente sur ordonnance | Non | Checkbox |
+
+**Comportement spécifique CREDIT (carnet) :**
+
+Quand `paymentMethod=CREDIT`, un sélecteur de client (carnet) obligatoire apparaît. Pour éviter une double saisie quand l'utilisateur a déjà rempli les champs « Nom » / « Téléphone » optionnels au-dessus :
+
+1. **Auto-match à la sélection CREDIT** : si un téléphone (puis à défaut un nom exact) saisi correspond à un Customer existant de la pharmacie, il est sélectionné automatiquement dans le dropdown.
+2. **Pré-remplissage de la création** : le bouton « + Nouveau client » ouvre la modale pré-remplie avec le nom et le téléphone des champs optionnels.
+3. **Synchronisation retour** : dès qu'un Customer est sélectionné (ou créé), son `fullName` et son `phone` sont recopiés dans les champs optionnels — l'utilisateur voit ainsi quel client est attaché à la vente, et ces valeurs servent au reçu si le serveur ne les écrasait pas (NB : pour CREDIT le serveur copie de toute façon depuis le Customer côté backend, cf. § 3).
 
 ### 4.4 Récapitulatif et validation
 
@@ -206,9 +222,19 @@ Total      = Sous-total - Remise + TVA
 - Bouton « Valider la vente » : désactivé si panier vide
 - Modal de succès avec récapitulatif (n° de reçu + total) et bouton **« Imprimer le reçu »**
 
+> ⚠️ La modale de succès **ne se ferme pas automatiquement** (incident historique : un timeout de 3 s fermait la modale avant que le caissier n'ait eu le temps de cliquer sur « Imprimer le reçu »). L'utilisateur doit cliquer « Fermer » ou « Imprimer le reçu » manuellement.
+
 ### 4.5 Impression du reçu
 
-Après une vente réussie, le frontend conserve un objet `Receipt` (état `lastReceipt`) construit à partir de la réponse `POST /api/sales` (id, date, vendeur) et du panier local (lignes, totaux, client, mode de paiement, ordonnance). Les infos pharmacie (nom, adresse, ville, téléphone, email, NINEA) sont récupérées au montage de la page via `GET /api/settings`.
+Les helpers d'impression vivent dans `src/lib/receipt.ts` (module partagé entre le POS et l'historique) :
+
+- `Receipt`, `ReceiptItem`, `ReceiptPharmacy` : types de données
+- `PAYMENT_LABELS_FR`, `SALE_STATUS_LABELS_FR` : libellés FR
+- `formatReceiptNumber(id)` : `id.slice(-8).toUpperCase()`
+- `buildReceiptHtml(receipt)` : génère le HTML du ticket
+- `printReceipt(receipt)` : ouvre une popup et déclenche l'impression
+
+Après une vente réussie, le POS conserve un objet `Receipt` (état `lastReceipt`) construit à partir de la réponse `POST /api/sales` (id, date, vendeur) et du panier local (lignes, totaux, client, mode de paiement, ordonnance). Les infos pharmacie (nom, adresse, ville, téléphone, email, NINEA) sont récupérées au montage de la page via `GET /api/settings`.
 
 L'impression est **déclenchée manuellement** depuis la modale de succès via le bouton **« Imprimer le reçu »** qui appelle `printReceipt()`. Cette fonction ouvre une fenêtre popup (`window.open`) avec un HTML autonome (police monospace ~320px de large, format ticket de caisse) et déclenche `window.print()` automatiquement à `load` (~200ms après).
 
@@ -230,18 +256,41 @@ Ce qui déclenche le rafraîchissement des KPI sur `/dashboard` si l'onglet est 
 
 ## 5. Historique des ventes
 
-Disponible via `GET /api/sales` avec filtres :
-- Plage de dates
-- Statut
-- Recherche client
+### 5.1 Page `/dashboard/ventes/historique`
 
-**Statuts :**
+Accessible via l'onglet **« Historique »** (même shell de navigation que le POS — cf. `src/app/dashboard/ventes/layout.tsx`). La permission RBAC utilisée est la même que pour le POS (`sales`).
+
+**Filtres :**
+
+| Filtre | Comportement |
+|--------|--------------|
+| Recherche | Client, téléphone, ou n° de reçu (8 derniers caractères). Debounce 300 ms. |
+| Plage de dates | `dateFrom` / `dateTo` (inclusifs) |
+| Mode de paiement | `CASH`, `MOBILE_MONEY`, `CARD`, `INSURANCE`, `CREDIT` (filtrage **côté client** sur la page — l'API n'expose pas ce filtre en v1) |
+| Statut | `completed`, `refunded`, `cancelled` |
+
+> ⚠️ Le filtre « mode de paiement » est appliqué côté client sur la page courante (pagination de 20). Il réduit donc parfois la page sans garantie d'exhaustivité multi-pages. Si ce besoin devient critique, étendre `GET /api/sales` pour supporter un paramètre `paymentMethod`.
+
+**Affichage :**
+
+- Desktop : tableau (date, n° reçu, client, vendeur, mode, nb articles, total, statut, actions)
+- Mobile : liste de cartes compactes
+- Pagination 20 items / page
+- Actions par ligne : **« Voir le détail »** (modal) + **« Réimprimer »** (appelle `GET /api/sales/[id]` puis `printReceipt`)
+
+### 5.2 Modal détail
+
+Affiche en-tête (date, vendeur, paiement, statut, client si présent, badge ordonnance), liste complète des articles, totaux. Bouton **« Réimprimer »** en pied de modal.
+
+### 5.3 Statuts
 
 | Statut | Description |
 |--------|-------------|
 | `completed` | Vente finalisée (défaut) |
 | `refunded` | Remboursée (modification manuelle SA) |
 | `cancelled` | Annulée avant encaissement |
+
+> Lorsqu'un reçu de statut `refunded` ou `cancelled` est réimprimé, un badge indiquant le statut apparaît en pied de ticket.
 
 ---
 
@@ -253,7 +302,7 @@ Disponible via `GET /api/sales` avec filtres :
 | `MOBILE_MONEY` | Mobile Money | Wave, Orange Money |
 | `CARD` | Carte bancaire | Terminal |
 | `INSURANCE` | Assurance | Tiers payant |
-| `CREDIT` | Crédit | Client régulier |
+| `CREDIT` | Crédit (carnet) | Client régulier — lien `customerId` obligatoire, voir `docs/Carnet.md` |
 
 ---
 

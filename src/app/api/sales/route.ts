@@ -54,9 +54,12 @@ export async function GET(request: NextRequest) {
     }
 
     if (search) {
+      // Receipt number is the 8 last chars of the cuid (uppercased in UI)
+      // Accept lowercase/uppercase input transparently for receipt lookup.
       where.OR = [
         { customerName: { contains: search, mode: 'insensitive' } },
         { customerPhone: { contains: search } },
+        { id: { endsWith: search.toLowerCase() } },
       ]
     }
 
@@ -112,6 +115,7 @@ export async function POST(request: NextRequest) {
       paymentMethod,
       customerName,
       customerPhone,
+      customerId,
       isPrescription,
     } = body
 
@@ -120,6 +124,56 @@ export async function POST(request: NextRequest) {
         { error: 'La vente doit contenir au moins un article' },
         { status: 400 }
       )
+    }
+
+    // Credit sales: customerId is required
+    let linkedCustomerId: string | null = null
+    let linkedCustomerName: string | null = null
+    let linkedCustomerPhone: string | null = null
+    if (paymentMethod === 'CREDIT') {
+      if (!customerId) {
+        return NextResponse.json(
+          { error: 'Un client est requis pour une vente à crédit (carnet)' },
+          { status: 400 }
+        )
+      }
+      const customer = await prisma.customer.findFirst({
+        where: { id: customerId, pharmacyId: session.pharmacyId, isActive: true },
+      })
+      if (!customer) {
+        return NextResponse.json({ error: 'Client introuvable' }, { status: 404 })
+      }
+      linkedCustomerId = customer.id
+      linkedCustomerName = customer.fullName
+      linkedCustomerPhone = customer.phone
+
+      // Enforce credit limit if set (>0)
+      if (customer.creditLimit > 0) {
+        const [saleAgg, paymentAgg] = await Promise.all([
+          prisma.sale.aggregate({
+            where: {
+              customerId: customer.id,
+              pharmacyId: session.pharmacyId,
+              paymentMethod: 'CREDIT',
+              status: { not: 'cancelled' },
+            },
+            _sum: { total: true },
+          }),
+          prisma.creditPayment.aggregate({
+            where: { customerId: customer.id, pharmacyId: session.pharmacyId },
+            _sum: { amount: true },
+          }),
+        ])
+        const currentBalance = (saleAgg._sum.total || 0) - (paymentAgg._sum.amount || 0)
+        if (currentBalance + (total || 0) > customer.creditLimit + 0.009) {
+          return NextResponse.json(
+            {
+              error: `Plafond de crédit dépassé (solde actuel ${currentBalance.toFixed(0)} + vente ${(total || 0).toFixed(0)} > plafond ${customer.creditLimit.toFixed(0)} XOF)`,
+            },
+            { status: 400 }
+          )
+        }
+      }
     }
 
     // Validate stock availability for all items
@@ -162,13 +216,14 @@ export async function POST(request: NextRequest) {
         data: {
           pharmacyId: session.pharmacyId!,
           userId: session.id,
+          customerId: linkedCustomerId,
           subtotal: subtotal || 0,
           tax: tax || 0,
           discount: discount || 0,
           total: total || 0,
           paymentMethod: paymentMethod || 'CASH',
-          customerName: customerName || null,
-          customerPhone: customerPhone || null,
+          customerName: linkedCustomerName ?? (customerName || null),
+          customerPhone: linkedCustomerPhone ?? (customerPhone || null),
           isPrescription: isPrescription || false,
           items: {
             create: items.map(

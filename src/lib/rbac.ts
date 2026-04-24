@@ -9,6 +9,7 @@ export const ALL_MENU_KEYS = [
   'medications',
   'stock',
   'sales',
+  'credit',
   'suppliers',
   'staff',
   'accounting',
@@ -25,8 +26,8 @@ export type MenuKey = (typeof ALL_MENU_KEYS)[number]
 export const DEFAULT_PERMISSIONS: Record<string, MenuKey[]> = {
   ADMIN: [...ALL_MENU_KEYS],
   PHARMACIST: ['dashboard'],
-  CASHIER: ['dashboard', 'sales', 'stock'],
-  ACCOUNTANT: ['dashboard', 'accounting', 'payroll'],
+  CASHIER: ['dashboard', 'sales', 'stock', 'credit'],
+  ACCOUNTANT: ['dashboard', 'accounting', 'payroll', 'credit'],
 }
 
 // Menu labels (for admin permission UI)
@@ -35,6 +36,7 @@ export const MENU_LABELS: Record<MenuKey, { fr: string; en: string }> = {
   medications: { fr: 'Médicaments', en: 'Medications' },
   stock: { fr: 'Gestion du Stock', en: 'Stock Management' },
   sales: { fr: 'Point de Vente', en: 'Point of Sale' },
+  credit: { fr: 'Carnet (crédit client)', en: 'Carnet (customer credit)' },
   suppliers: { fr: 'Fournisseurs', en: 'Suppliers' },
   staff: { fr: 'Personnel', en: 'Staff' },
   accounting: { fr: 'Comptabilité', en: 'Accounting' },

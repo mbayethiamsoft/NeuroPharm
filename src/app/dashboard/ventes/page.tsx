@@ -1,7 +1,21 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Search, Plus, Minus, Trash2, ShoppingCart, CheckCircle, X, Loader2, Printer } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Search, Plus, Minus, Trash2, ShoppingCart, CheckCircle, X, Loader2, Printer, UserPlus } from 'lucide-react'
+import {
+  printReceipt,
+  formatReceiptNumber,
+  type Receipt,
+  type ReceiptPharmacy,
+} from '@/lib/receipt'
+
+interface CustomerOption {
+  id: string
+  fullName: string
+  phone: string | null
+  creditLimit: number
+  balance: number
+}
 
 interface Medication {
   id: string
@@ -19,176 +33,8 @@ interface CartItem {
   total: number
 }
 
-interface PharmacyInfo {
-  name: string
-  address: string | null
-  city: string | null
-  phone: string | null
-  email: string | null
-  taxId: string | null
-}
-
-interface ReceiptItem {
-  name: string
-  quantity: number
-  unitPrice: number
-  total: number
-}
-
-interface Receipt {
-  id: string
-  createdAt: string
-  subtotal: number
-  discount: number
-  tax: number
-  total: number
-  paymentMethod: string
-  customerName: string | null
-  customerPhone: string | null
-  isPrescription: boolean
-  cashier: string
-  items: ReceiptItem[]
-  pharmacy: PharmacyInfo | null
-}
-
 const formatCurrency = (n: number) =>
   new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'XOF', minimumFractionDigits: 0 }).format(n)
-
-const PAYMENT_LABELS: Record<string, string> = {
-  CASH: 'Espèces',
-  MOBILE_MONEY: 'Mobile Money',
-  CARD: 'Carte bancaire',
-  INSURANCE: 'Assurance',
-  CREDIT: 'Crédit',
-}
-
-const escapeHtml = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-
-const buildReceiptHtml = (r: Receipt) => {
-  const date = new Date(r.createdAt)
-  const dateStr = date.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
-  const shortRef = r.id.slice(-8).toUpperCase()
-  const pharmacy = r.pharmacy
-  const headerLines: string[] = []
-  if (pharmacy) {
-    headerLines.push(`<div class="ph-name">${escapeHtml(pharmacy.name)}</div>`)
-    const addr = [pharmacy.address, pharmacy.city].filter(Boolean).join(', ')
-    if (addr) headerLines.push(`<div>${escapeHtml(addr)}</div>`)
-    if (pharmacy.phone) headerLines.push(`<div>Tél : ${escapeHtml(pharmacy.phone)}</div>`)
-    if (pharmacy.email) headerLines.push(`<div>${escapeHtml(pharmacy.email)}</div>`)
-    if (pharmacy.taxId) headerLines.push(`<div>NINEA : ${escapeHtml(pharmacy.taxId)}</div>`)
-  }
-
-  const itemsRows = r.items.map(i => `
-    <tr>
-      <td class="left">${escapeHtml(i.name)}</td>
-      <td class="center">${i.quantity}</td>
-      <td class="right">${formatCurrency(i.unitPrice)}</td>
-      <td class="right">${formatCurrency(i.total)}</td>
-    </tr>`).join('')
-
-  const customerBlock = (r.customerName || r.customerPhone)
-    ? `<div class="block">
-        <div><strong>Client :</strong> ${escapeHtml(r.customerName || '-')}</div>
-        ${r.customerPhone ? `<div><strong>Téléphone :</strong> ${escapeHtml(r.customerPhone)}</div>` : ''}
-      </div>`
-    : ''
-
-  const discountRow = r.discount > 0
-    ? `<tr><td>Remise</td><td class="right">-${formatCurrency(r.discount)}</td></tr>`
-    : ''
-  const taxRow = r.tax > 0
-    ? `<tr><td>TVA</td><td class="right">${formatCurrency(r.tax)}</td></tr>`
-    : ''
-
-  return `<!doctype html>
-<html lang="fr">
-<head>
-<meta charset="utf-8" />
-<title>Reçu ${shortRef}</title>
-<style>
-  * { box-sizing: border-box; }
-  body { font-family: 'Courier New', monospace; color: #111; margin: 0; padding: 16px; font-size: 12px; }
-  .receipt { max-width: 320px; margin: 0 auto; }
-  .header { text-align: center; margin-bottom: 12px; }
-  .ph-name { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
-  .meta { display: flex; justify-content: space-between; font-size: 11px; margin: 8px 0; }
-  .block { margin: 8px 0; padding: 8px 0; border-top: 1px dashed #999; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { padding: 4px 2px; vertical-align: top; }
-  thead th { border-bottom: 1px dashed #999; font-size: 11px; text-align: left; }
-  .center { text-align: center; }
-  .right { text-align: right; }
-  .left { text-align: left; }
-  .totals { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #999; }
-  .totals td { padding: 2px 0; font-size: 12px; }
-  .totals .grand td { font-size: 14px; font-weight: 700; padding-top: 6px; border-top: 1px solid #111; }
-  .footer { margin-top: 16px; text-align: center; font-size: 11px; }
-  .badge { display: inline-block; margin-top: 6px; padding: 2px 8px; border: 1px solid #111; border-radius: 4px; font-size: 10px; }
-  @media print {
-    body { padding: 0; }
-    @page { margin: 8mm; }
-  }
-</style>
-</head>
-<body>
-  <div class="receipt">
-    <div class="header">${headerLines.join('')}</div>
-
-    <div class="meta">
-      <span>Reçu n° ${shortRef}</span>
-      <span>${escapeHtml(dateStr)}</span>
-    </div>
-    <div class="meta">
-      <span>Vendeur : ${escapeHtml(r.cashier)}</span>
-      <span>Paiement : ${escapeHtml(PAYMENT_LABELS[r.paymentMethod] || r.paymentMethod)}</span>
-    </div>
-
-    ${customerBlock}
-
-    <table>
-      <thead>
-        <tr>
-          <th class="left">Article</th>
-          <th class="center">Qté</th>
-          <th class="right">PU</th>
-          <th class="right">Total</th>
-        </tr>
-      </thead>
-      <tbody>${itemsRows}</tbody>
-    </table>
-
-    <table class="totals">
-      <tr><td>Sous-total</td><td class="right">${formatCurrency(r.subtotal)}</td></tr>
-      ${discountRow}
-      ${taxRow}
-      <tr class="grand"><td>Total à payer</td><td class="right">${formatCurrency(r.total)}</td></tr>
-    </table>
-
-    ${r.isPrescription ? '<div class="footer"><span class="badge">Vente sur ordonnance</span></div>' : ''}
-
-    <div class="footer">
-      Merci de votre visite !<br/>
-      Conservez ce reçu pour tout échange.
-    </div>
-  </div>
-  <script>
-    window.addEventListener('load', () => {
-      setTimeout(() => { window.focus(); window.print(); }, 200);
-    });
-  </script>
-</body>
-</html>`
-}
-
-const printReceipt = (receipt: Receipt) => {
-  const w = window.open('', '_blank', 'width=420,height=640')
-  if (!w) return
-  w.document.open()
-  w.document.write(buildReceiptHtml(receipt))
-  w.document.close()
-}
 
 export default function VentesPage() {
   const [medications, setMedications] = useState<Medication[]>([])
@@ -202,8 +48,19 @@ export default function VentesPage() {
   const [submitting, setSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const [error, setError] = useState('')
-  const [pharmacy, setPharmacy] = useState<PharmacyInfo | null>(null)
+  const [pharmacy, setPharmacy] = useState<ReceiptPharmacy | null>(null)
   const [lastReceipt, setLastReceipt] = useState<Receipt | null>(null)
+  const [customers, setCustomers] = useState<CustomerOption[]>([])
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('')
+  const [customersLoading, setCustomersLoading] = useState(false)
+  const [showCustomerModal, setShowCustomerModal] = useState(false)
+  const [newCustomerForm, setNewCustomerForm] = useState({
+    fullName: '',
+    phone: '',
+    creditLimit: '',
+  })
+  const [newCustomerError, setNewCustomerError] = useState('')
+  const [newCustomerSaving, setNewCustomerSaving] = useState(false)
 
   useEffect(() => {
     fetch('/api/settings')
@@ -234,6 +91,131 @@ export default function VentesPage() {
         .then(d => setMedications(d.medications || []))
     }
   }, [search])
+
+  const loadCustomers = async () => {
+    setCustomersLoading(true)
+    try {
+      const res = await fetch('/api/customers?limit=500')
+      if (res.ok) {
+        const data = await res.json()
+        setCustomers(data.customers || [])
+      }
+    } finally {
+      setCustomersLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (paymentMethod === 'CREDIT' && customers.length === 0 && !customersLoading) {
+      loadCustomers()
+    }
+    // Reset selection when switching away from CREDIT
+    if (paymentMethod !== 'CREDIT') {
+      setSelectedCustomerId('')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentMethod])
+
+  const selectedCustomer = useMemo(
+    () => customers.find((c) => c.id === selectedCustomerId) || null,
+    [customers, selectedCustomerId]
+  )
+
+  // Auto-match an existing customer by phone (or name) when switching to CREDIT
+  // so the user doesn't have to re-enter someone they already typed above.
+  useEffect(() => {
+    if (paymentMethod !== 'CREDIT') return
+    if (selectedCustomerId) return
+    if (customers.length === 0) return
+    const phone = customerPhone.trim()
+    const name = customerName.trim().toLowerCase()
+    let match: CustomerOption | undefined
+    if (phone) match = customers.find((c) => c.phone && c.phone.trim() === phone)
+    if (!match && name) match = customers.find((c) => c.fullName.toLowerCase() === name)
+    if (match) setSelectedCustomerId(match.id)
+  }, [paymentMethod, customers, customerPhone, customerName, selectedCustomerId])
+
+  // Sync the selected customer back into the optional fields above so the
+  // receipt carries the right name/phone and the user gets visual confirmation.
+  useEffect(() => {
+    if (!selectedCustomer) return
+    setCustomerName(selectedCustomer.fullName)
+    setCustomerPhone(selectedCustomer.phone || '')
+  }, [selectedCustomer])
+
+  const openNewCustomerModal = () => {
+    setNewCustomerForm({
+      fullName: customerName.trim(),
+      phone: customerPhone.trim(),
+      creditLimit: '',
+    })
+    setNewCustomerError('')
+    setShowCustomerModal(true)
+  }
+
+  const handleCreateCustomer = async () => {
+    setNewCustomerError('')
+    const fullName = newCustomerForm.fullName.trim()
+    if (!fullName) {
+      setNewCustomerError('Nom requis')
+      return
+    }
+    const phone = newCustomerForm.phone.trim()
+
+    // If a customer with this phone is already loaded, just select it instead of
+    // hitting the API for nothing.
+    if (phone) {
+      const existing = customers.find((c) => c.phone && c.phone.trim() === phone)
+      if (existing) {
+        setSelectedCustomerId(existing.id)
+        setShowCustomerModal(false)
+        setNewCustomerForm({ fullName: '', phone: '', creditLimit: '' })
+        return
+      }
+    }
+
+    setNewCustomerSaving(true)
+    try {
+      const res = await fetch('/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName,
+          phone: phone || null,
+          creditLimit: Number(newCustomerForm.creditLimit) || 0,
+        }),
+      })
+      const data = await res.json()
+
+      // Phone conflict (API returns 409) → refresh, find the existing customer,
+      // and auto-select it. The user gets the same outcome as creating a fresh one.
+      if (res.status === 409 && phone) {
+        const refreshed = await fetch('/api/customers?limit=500')
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null)
+        const list: CustomerOption[] = refreshed?.customers || []
+        setCustomers(list)
+        const existing = list.find((c) => c.phone && c.phone.trim() === phone)
+        if (existing) {
+          setSelectedCustomerId(existing.id)
+          setShowCustomerModal(false)
+          setNewCustomerForm({ fullName: '', phone: '', creditLimit: '' })
+          return
+        }
+      }
+
+      if (!res.ok) {
+        setNewCustomerError(data.error || 'Erreur')
+        return
+      }
+      await loadCustomers()
+      setSelectedCustomerId(data.customer.id)
+      setShowCustomerModal(false)
+      setNewCustomerForm({ fullName: '', phone: '', creditLimit: '' })
+    } finally {
+      setNewCustomerSaving(false)
+    }
+  }
 
   const addToCart = (med: Medication) => {
     setCart(prev => {
@@ -268,6 +250,10 @@ export default function VentesPage() {
 
   const handleSubmit = async () => {
     if (cart.length === 0) return
+    if (paymentMethod === 'CREDIT' && !selectedCustomerId) {
+      setError('Sélectionnez un client pour une vente à crédit')
+      return
+    }
     setSubmitting(true)
     setError('')
 
@@ -289,6 +275,7 @@ export default function VentesPage() {
           paymentMethod,
           customerName: customerName || null,
           customerPhone: customerPhone || null,
+          customerId: paymentMethod === 'CREDIT' ? selectedCustomerId : null,
           isPrescription,
         }),
       })
@@ -330,11 +317,14 @@ export default function VentesPage() {
       setCustomerName('')
       setCustomerPhone('')
       setIsPrescription(false)
+      setSelectedCustomerId('')
+      // Refresh customers to update balances after a credit sale
+      if (paymentMethod === 'CREDIT') loadCustomers()
       // Dispatch event for dashboard auto-refresh
       window.dispatchEvent(new CustomEvent('neuropharm:sale-complete'))
       // Refresh medication list
       fetch('/api/medications?limit=20').then(r => r.json()).then(d => setMedications(d.medications || []))
-      setTimeout(() => setShowSuccess(false), 3000)
+      // Modal stays open until the user closes it manually — gives time to print the receipt.
     } catch {
       setError('Erreur de connexion')
     } finally {
@@ -343,7 +333,7 @@ export default function VentesPage() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-8rem)] animate-fade-in">
+    <div className="flex flex-col lg:flex-row gap-4 h-full min-h-0">
       {/* Left: Products + Cart */}
       <div className="flex-1 flex flex-col min-h-0">
         {/* Search */}
@@ -454,6 +444,7 @@ export default function VentesPage() {
                 { value: 'MOBILE_MONEY', label: 'Mobile Money' },
                 { value: 'CARD', label: 'Carte' },
                 { value: 'INSURANCE', label: 'Assurance' },
+                { value: 'CREDIT', label: 'Carnet (crédit)' },
               ].map(pm => (
                 <button key={pm.value} onClick={() => setPaymentMethod(pm.value)}
                   className={`px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
@@ -466,6 +457,57 @@ export default function VentesPage() {
               ))}
             </div>
           </div>
+
+          {/* Customer selector (CREDIT only) */}
+          {paymentMethod === 'CREDIT' && (
+            <div className="space-y-2 p-3 rounded-lg bg-amber-50 border border-amber-200 min-w-0">
+              <label className="block text-xs font-semibold text-amber-800">
+                Client (carnet) — obligatoire
+              </label>
+              <div className="flex gap-2 min-w-0">
+                <select
+                  value={selectedCustomerId}
+                  onChange={(e) => setSelectedCustomerId(e.target.value)}
+                  className="min-w-0 flex-1 px-2 py-2 text-sm border border-amber-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/40 truncate"
+                >
+                  <option value="">— Sélectionner un client —</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.fullName}
+                      {c.phone ? ` · ${c.phone}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={openNewCustomerModal}
+                  title="Nouveau client (pré-rempli avec le nom/téléphone saisis)"
+                  className="shrink-0 p-2 rounded-lg bg-amber-600 text-white hover:bg-amber-700"
+                >
+                  <UserPlus className="w-4 h-4" />
+                </button>
+              </div>
+              {selectedCustomer && (
+                <div className="text-xs text-amber-900 space-y-0.5 min-w-0 break-words">
+                  <div>
+                    Solde actuel :{' '}
+                    <strong>{formatCurrency(selectedCustomer.balance)}</strong>
+                  </div>
+                  {selectedCustomer.creditLimit > 0 && (
+                    <div>
+                      Plafond :{' '}
+                      <strong>{formatCurrency(selectedCustomer.creditLimit)}</strong>
+                      {selectedCustomer.balance + total > selectedCustomer.creditLimit && (
+                        <div className="text-red-700 font-semibold">
+                          Plafond dépassé !
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Discount */}
           <div>
@@ -513,6 +555,92 @@ export default function VentesPage() {
         </div>
       </div>
 
+      {/* New customer modal */}
+      {showCustomerModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={() => setShowCustomerModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-amber-600" /> Nouveau client (carnet)
+              </h3>
+              <button
+                onClick={() => setShowCustomerModal(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Nom complet *</label>
+                <input
+                  value={newCustomerForm.fullName}
+                  onChange={(e) =>
+                    setNewCustomerForm((f) => ({ ...f, fullName: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Téléphone</label>
+                <input
+                  value={newCustomerForm.phone}
+                  onChange={(e) => setNewCustomerForm((f) => ({ ...f, phone: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Plafond de crédit (XOF)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={newCustomerForm.creditLimit}
+                  onChange={(e) =>
+                    setNewCustomerForm((f) => ({ ...f, creditLimit: e.target.value }))
+                  }
+                  placeholder="0 = pas de limite"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                />
+              </div>
+              {newCustomerError && (
+                <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">
+                  {newCustomerError}
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setShowCustomerModal(false)}
+                  className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleCreateCustomer}
+                  disabled={newCustomerSaving}
+                  className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {newCustomerSaving ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CheckCircle className="w-4 h-4" />
+                  )}
+                  Créer
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Success modal */}
       {showSuccess && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
@@ -524,7 +652,7 @@ export default function VentesPage() {
             <p className="text-gray-500 mt-2">La vente a été enregistrée avec succès</p>
             {lastReceipt && (
               <p className="text-xs text-gray-400 mt-1">
-                Reçu n° {lastReceipt.id.slice(-8).toUpperCase()} • {formatCurrency(lastReceipt.total)}
+                Reçu n° {formatReceiptNumber(lastReceipt.id)} • {formatCurrency(lastReceipt.total)}
               </p>
             )}
             <div className="mt-5 flex flex-col sm:flex-row gap-2 justify-center">
