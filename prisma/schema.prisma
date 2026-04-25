@@ -42,6 +42,12 @@ model Pharmacy {
   settings     PharmacySettings?
   customers    Customer[]
   creditPayments CreditPayment[]
+  insurances   Insurance[]
+  insuranceBeneficiaries InsuranceBeneficiary[]
+  proformas    Proforma[]
+  creditNotes  CreditNote[]
+  creditNoteUsages CreditNoteUsage[]
+  pendingSales PendingSale[]
 
   @@map("pharmacies")
 }
@@ -346,10 +352,89 @@ model Sale {
   change        Float?        // monnaie rendue = amountPaid - total (CASH uniquement)
   isPrescription Boolean      @default(false)
   status        String        @default("completed") // completed, refunded, cancelled
+
+  // Tiers payant (assurance / mutuelle / CMU / IPM)
+  insuranceId       String?
+  insurance         Insurance?            @relation(fields: [insuranceId], references: [id], onDelete: SetNull)
+  beneficiaryId     String?
+  beneficiary       InsuranceBeneficiary? @relation(fields: [beneficiaryId], references: [id], onDelete: SetNull)
+  insuranceCoverage Float?                // % pris en charge (snapshot, peut être surchargé par vente)
+  insuranceAmount   Float?                // montant pris en charge par l'institution
+  patientAmount     Float?                // reste à charge du patient (co-pay)
+  insuranceClaimRef String?               // n° de bon / référence ordonnance fourni par le patient
+  insuranceClaimStatus String?            @default("pending") // pending, billed, paid, rejected — null pour ventes non-INSURANCE
+
+  // Avoirs (credit notes) — appliqués sur cette vente comme moyen de paiement complémentaire
+  creditNoteAmount  Float?                // montant total déduit via avoir(s) sur cette vente
+  creditNoteUsages  CreditNoteUsage[]
+
+  // Avoir(s) émis suite à cette vente (annulation totale, retour, ordonnance partielle)
+  creditNotesIssued CreditNote[]          @relation("CreditNoteOrigin")
+
   createdAt     DateTime      @default(now())
 
   @@index([pharmacyId, customerId])
+  @@index([pharmacyId, insuranceId])
+  @@index([pharmacyId, insuranceClaimStatus])
   @@map("sales")
+}
+
+// ============== AVOIRS (CREDIT NOTES) ==============
+// Un avoir représente une dette de la pharmacie envers un client (l'inverse
+// du carnet). Émis après un retour produit, une erreur de facturation,
+// l'annulation d'une vente, ou une ordonnance partiellement honorée.
+// Réutilisable au POS comme moyen de paiement complémentaire (réduit le total
+// à payer ; la vente garde sa méthode de paiement réelle pour la compta).
+
+model CreditNote {
+  id             String   @id @default(cuid())
+  pharmacyId     String
+  pharmacy       Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  // Lien client optionnel (un avoir peut être nominatif via Customer ou
+  // anonyme via snapshot customerName/Phone — comme une vente CASH).
+  customerId     String?
+  customer       Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName   String?
+  customerPhone  String?
+
+  // Vente d'origine (optionnelle — annulation/retour la référence ; ordonnance
+  // partielle peut la référencer ; erreur de caisse n'est pas forcément liée).
+  originSaleId   String?
+  originSale     Sale?    @relation("CreditNoteOrigin", fields: [originSaleId], references: [id], onDelete: SetNull)
+
+  reason         String   @default("OTHER") // RETURN, BILLING_ERROR, CANCELLATION, PARTIAL_PRESCRIPTION, OTHER
+  amount         Float                       // montant initial de l'avoir
+  usedAmount     Float    @default(0)        // montant déjà consommé via une ou plusieurs ventes
+  status         String   @default("active") // active, partially_used, used, expired, cancelled
+  expiresAt      DateTime?                   // null = pas d'expiration
+  notes          String?
+  createdBy      String?                     // userId de l'émetteur
+
+  usages         CreditNoteUsage[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([pharmacyId, status])
+  @@index([pharmacyId, customerId])
+  @@map("credit_notes")
+}
+
+model CreditNoteUsage {
+  id            String     @id @default(cuid())
+  pharmacyId    String
+  pharmacy      Pharmacy   @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  creditNoteId  String
+  creditNote    CreditNote @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
+  saleId        String
+  sale          Sale       @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  amount        Float                       // montant déduit sur cette vente
+  createdAt     DateTime   @default(now())
+
+  @@index([pharmacyId, creditNoteId])
+  @@index([pharmacyId, saleId])
+  @@map("credit_note_usages")
 }
 
 // ============== CARNET (CRÉDIT CLIENT) ==============
@@ -369,6 +454,7 @@ model Customer {
 
   sales       Sale[]
   payments    CreditPayment[]
+  creditNotes CreditNote[]
 
   @@unique([pharmacyId, phone])
   @@index([pharmacyId, isActive])
@@ -391,6 +477,66 @@ model CreditPayment {
   @@map("credit_payments")
 }
 
+// ============== ASSURANCES / TIERS PAYANT ==============
+// Modélise les complémentaires santé : assurances privées, mutuelles, CMU,
+// institutions de prévoyance maladie (IPM), etc. Le pharmacien peut les
+// enregistrer, leur rattacher des bénéficiaires (titulaires + ayants droits)
+// et déclarer une vente comme prise en charge partielle ou totale.
+
+model Insurance {
+  id           String   @id @default(cuid())
+  pharmacyId   String
+  pharmacy     Pharmacy @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  name         String
+  type         String   @default("ASSURANCE") // ASSURANCE, MUTUELLE, CMU, IPM, AUTRE
+  code         String?  // n° contrat / convention chez la pharmacie
+  contactName  String?
+  phone        String?
+  email        String?
+  address      String?
+  coverageRate Float    @default(80) // % par défaut pris en charge sur les ventes
+  notes        String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  beneficiaries InsuranceBeneficiary[]
+  sales         Sale[]
+
+  @@unique([pharmacyId, name])
+  @@index([pharmacyId, isActive])
+  @@map("insurances")
+}
+
+model InsuranceBeneficiary {
+  id              String    @id @default(cuid())
+  pharmacyId      String
+  pharmacy        Pharmacy  @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  insuranceId     String
+  insurance       Insurance @relation(fields: [insuranceId], references: [id], onDelete: Cascade)
+  fullName        String
+  membershipNumber String?  // matricule / n° d'affilié
+  phone           String?
+  birthDate       DateTime?
+  relationship    String   @default("HOLDER") // HOLDER, SPOUSE, CHILD, PARENT, OTHER
+  // Pour les ayants droits : pointer vers le titulaire (HOLDER) du même contrat.
+  // Null pour le titulaire lui-même.
+  holderId        String?
+  holder          InsuranceBeneficiary?  @relation("BeneficiaryDependents", fields: [holderId], references: [id], onDelete: SetNull)
+  dependents      InsuranceBeneficiary[] @relation("BeneficiaryDependents")
+  notes           String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  sales           Sale[]
+
+  @@unique([insuranceId, membershipNumber])
+  @@index([pharmacyId, insuranceId])
+  @@index([insuranceId, isActive])
+  @@map("insurance_beneficiaries")
+}
+
 model SaleItem {
   id           String     @id @default(cuid())
   saleId       String
@@ -403,6 +549,130 @@ model SaleItem {
   createdAt    DateTime   @default(now())
 
   @@map("sale_items")
+}
+
+// ============== PRO FORMA (DEVIS — SANS VALEUR COMPTABLE) ==============
+// Un Proforma est un devis estimatif remis au client. Il ne décrémente pas
+// le stock, n'entre pas dans le chiffre d'affaires et n'est pas lié à une
+// méthode de paiement. Il peut être converti en vente ultérieurement : la
+// conversion passe par le POS classique qui, lui, applique toutes les règles
+// métier (stock, audit, événement temps réel). Ce modèle sert uniquement de
+// snapshot pour réimpression et conversion.
+
+model Proforma {
+  id             String         @id @default(cuid())
+  pharmacyId     String
+  pharmacy       Pharmacy       @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  userId         String         // auteur du devis
+  items          ProformaItem[]
+
+  // Snapshot montants (calculés côté serveur à la création/édition)
+  subtotal       Float
+  discount       Float          @default(0) // montant de la remise
+  discountRate   Float          @default(0) // % de remise appliqué
+  total          Float
+
+  // Client (optionnel — pas de relation vers Customer, juste un snapshot)
+  customerName   String?
+  customerPhone  String?
+
+  // Durée de validité en jours (0 = illimitée) — info imprimée sur le devis
+  validityDays   Int            @default(15)
+
+  notes          String?
+  status         String         @default("active") // active, converted, cancelled
+  convertedSaleId String?       // si converti en vente, id de la Sale résultante
+  convertedAt    DateTime?
+
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([pharmacyId, status])
+  @@index([pharmacyId, createdAt])
+  @@map("proformas")
+}
+
+model ProformaItem {
+  id            String     @id @default(cuid())
+  proformaId    String
+  proforma      Proforma   @relation(fields: [proformaId], references: [id], onDelete: Cascade)
+  medicationId  String?    // nullable si le médicament a été supprimé plus tard
+  medicationName String    // snapshot du nom
+  medicationRef  String?   // snapshot du code-barres / ref
+  quantity      Int
+  unitPrice     Float
+  total         Float
+  createdAt     DateTime   @default(now())
+
+  @@index([proformaId])
+  @@map("proforma_items")
+}
+
+// ============== PENDING SALES (ventes en attente) ==============
+
+model PendingSale {
+  id             String            @id @default(cuid())
+  pharmacyId     String
+  pharmacy       Pharmacy          @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  userId         String            // auteur (pharmacien / caissier qui a mis la vente en attente)
+  items          PendingSaleItem[]
+
+  // Snapshot panier
+  subtotal       Float
+  discount       Float             @default(0)
+  discountRate   Float             @default(0)
+  tax            Float             @default(0)
+  total          Float
+
+  // Client (snapshot — pas de FK Customer pour rester aligné sur Proforma)
+  customerName   String?
+  customerPhone  String?
+  customerId     String?           // optionnel : si vente CRÉDIT prévue, on garde l'id pour repérer le client carnet
+
+  // Mode paiement prévu (optionnel, peut changer à la reprise)
+  paymentMethod  String?           // CASH | MOBILE_MONEY | CARD | INSURANCE | CREDIT
+
+  // Contexte assurance / ordonnance
+  insuranceId       String?
+  beneficiaryId     String?
+  insuranceCoverage Float?
+  isPrescription    Boolean        @default(false)
+
+  // Avoir éventuellement appliqué (sera revalidé à la reprise)
+  creditNoteId      String?
+  creditNoteAmount  Float?
+
+  // Raison + note
+  reason         String            // NO_PAYMENT | MISSING_PRESCRIPTION | AWAITING_INSURANCE | OUT_OF_STOCK | OTHER
+  note           String?
+
+  // Cycle de vie
+  status         String            @default("active") // active | converted | cancelled
+  convertedSaleId String?
+  convertedAt    DateTime?
+
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([pharmacyId, status])
+  @@index([pharmacyId, createdAt])
+  @@map("pending_sales")
+}
+
+model PendingSaleItem {
+  id             String      @id @default(cuid())
+  pendingSaleId  String
+  pendingSale    PendingSale @relation(fields: [pendingSaleId], references: [id], onDelete: Cascade)
+  medicationId   String?     // nullable si le médicament a été supprimé entre temps
+  medicationName String      // snapshot
+  medicationRef  String?
+  quantity       Int
+  unitPrice      Float
+  total          Float
+  createdAt      DateTime    @default(now())
+
+  @@index([pendingSaleId])
+  @@map("pending_sale_items")
 }
 
 // ============== SUPPLIERS ==============

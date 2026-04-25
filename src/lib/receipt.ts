@@ -26,6 +26,8 @@ export interface Receipt {
   customerPhone: string | null
   amountPaid?: number | null
   change?: number | null
+  creditNoteAmount?: number | null
+  creditNoteRef?: string | null
   isPrescription: boolean
   cashier: string
   items: ReceiptItem[]
@@ -102,6 +104,14 @@ export function buildReceiptHtml(r: Receipt): string {
   const discountRow =
     r.discount > 0 ? `<tr><td>Remise</td><td class="right">-${formatCurrency(r.discount)}</td></tr>` : ''
   const taxRow = r.tax > 0 ? `<tr><td>TVA</td><td class="right">${formatCurrency(r.tax)}</td></tr>` : ''
+
+  // Credit note (avoir) applied to this sale — appears between the grand total
+  // and the cash tender, so the customer sees how the net-due was reached.
+  const creditNoteRows =
+    r.creditNoteAmount && r.creditNoteAmount > 0
+      ? `<tr><td>Avoir${r.creditNoteRef ? ` n° ${escapeHtml(r.creditNoteRef)}` : ''}</td><td class="right">-${formatCurrency(r.creditNoteAmount)}</td></tr>
+         <tr class="change"><td>Net à payer</td><td class="right">${formatCurrency(Math.max(0, r.total - r.creditNoteAmount))}</td></tr>`
+      : ''
 
   // Cash register block (CASH sales only, when the pharmacist recorded the tender).
   const cashRows =
@@ -184,6 +194,7 @@ export function buildReceiptHtml(r: Receipt): string {
       ${discountRow}
       ${taxRow}
       <tr class="grand"><td>Total à payer</td><td class="right">${formatCurrency(r.total)}</td></tr>
+      ${creditNoteRows}
       ${cashRows}
     </table>
 
@@ -317,5 +328,142 @@ export function printPaymentReceipt(receipt: PaymentReceipt): void {
   if (!w) return
   w.document.open()
   w.document.write(buildPaymentReceiptHtml(receipt))
+  w.document.close()
+}
+
+// ============== CREDIT NOTE RECEIPT (Avoir) ==============
+
+const REASON_LABELS_FR: Record<string, string> = {
+  RETURN: 'Retour produit',
+  BILLING_ERROR: 'Erreur de facturation',
+  CANCELLATION: 'Annulation de vente',
+  PARTIAL_PRESCRIPTION: 'Ordonnance partielle',
+  OTHER: 'Autre',
+}
+
+export interface CreditNoteReceipt {
+  id: string
+  createdAt: string
+  amount: number
+  usedAmount: number
+  remaining: number
+  reason: string
+  customerName: string | null
+  customerPhone: string | null
+  notes: string | null
+  expiresAt: string | null
+  originSaleRef: string | null
+  issuedBy: string | null
+  pharmacy: ReceiptPharmacy | null
+}
+
+export function buildCreditNoteReceiptHtml(r: CreditNoteReceipt): string {
+  const date = new Date(r.createdAt)
+  const dateStr = date.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+  const shortRef = formatReceiptNumber(r.id)
+  const pharmacy = r.pharmacy
+  const expStr = r.expiresAt
+    ? new Date(r.expiresAt).toLocaleDateString('fr-FR', { dateStyle: 'medium' })
+    : null
+
+  const headerLines: string[] = []
+  if (pharmacy) {
+    headerLines.push(`<div class="ph-name">${escapeHtml(pharmacy.name)}</div>`)
+    const addr = [pharmacy.address, pharmacy.city].filter(Boolean).join(', ')
+    if (addr) headerLines.push(`<div>${escapeHtml(addr)}</div>`)
+    if (pharmacy.phone) headerLines.push(`<div>Tél : ${escapeHtml(pharmacy.phone)}</div>`)
+    if (pharmacy.taxId) headerLines.push(`<div>NINEA : ${escapeHtml(pharmacy.taxId)}</div>`)
+  }
+
+  return `<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Avoir ${shortRef}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Courier New', monospace; color: #111; margin: 0; padding: 16px; font-size: 12px; }
+  .receipt { max-width: 320px; margin: 0 auto; }
+  .header { text-align: center; margin-bottom: 12px; }
+  .ph-name { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  .title { text-align: center; font-size: 13px; font-weight: 700; padding: 6px 0; border-top: 1px dashed #999; border-bottom: 1px dashed #999; margin: 8px 0; letter-spacing: 0.05em; text-transform: uppercase; color: #6d28d9; }
+  .meta { display: flex; justify-content: space-between; font-size: 11px; margin: 6px 0; }
+  .block { margin: 8px 0; padding: 8px 0; border-top: 1px dashed #999; }
+  table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  td { padding: 3px 0; font-size: 12px; }
+  .right { text-align: right; }
+  .amount { font-size: 20px; font-weight: 700; text-align: center; padding: 12px 0; margin: 10px 0; border: 2px solid #6d28d9; color: #6d28d9; border-radius: 6px; }
+  .grand td { font-size: 14px; font-weight: 700; padding-top: 6px; border-top: 1px solid #111; }
+  .footer { margin-top: 16px; text-align: center; font-size: 11px; }
+  .badge { display: inline-block; margin-top: 6px; padding: 2px 8px; border: 1px solid #6d28d9; color: #6d28d9; border-radius: 4px; font-size: 10px; }
+  .terms { font-size: 10px; color: #666; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #999; }
+  @media print { body { padding: 0; } @page { margin: 8mm; } }
+</style>
+</head>
+<body>
+  <div class="receipt">
+    <div class="header">${headerLines.join('')}</div>
+    <div class="title">Bon d'avoir</div>
+
+    <div class="meta">
+      <span>Avoir n° ${shortRef}</span>
+      <span>${escapeHtml(dateStr)}</span>
+    </div>
+    <div class="meta">
+      <span>Émis par : ${escapeHtml(r.issuedBy || '—')}</span>
+      <span>Motif : ${escapeHtml(REASON_LABELS_FR[r.reason] || r.reason)}</span>
+    </div>
+
+    ${
+      r.customerName || r.customerPhone
+        ? `<div class="block">
+            <div><strong>Client :</strong> ${escapeHtml(r.customerName || '—')}</div>
+            ${r.customerPhone ? `<div><strong>Téléphone :</strong> ${escapeHtml(r.customerPhone)}</div>` : ''}
+          </div>`
+        : ''
+    }
+
+    <div class="amount">${formatCurrency(r.amount)}</div>
+
+    <table>
+      <tr><td>Montant initial</td><td class="right">${formatCurrency(r.amount)}</td></tr>
+      ${
+        r.usedAmount > 0
+          ? `<tr><td>Déjà utilisé</td><td class="right">-${formatCurrency(r.usedAmount)}</td></tr>`
+          : ''
+      }
+      <tr class="grand"><td>Solde disponible</td><td class="right">${formatCurrency(r.remaining)}</td></tr>
+    </table>
+
+    ${
+      r.originSaleRef
+        ? `<div class="block"><strong>Vente d'origine :</strong> ${escapeHtml(r.originSaleRef)}</div>`
+        : ''
+    }
+    ${expStr ? `<div class="block"><strong>Valable jusqu'au :</strong> ${escapeHtml(expStr)}</div>` : ''}
+    ${r.notes ? `<div class="block"><strong>Note :</strong> ${escapeHtml(r.notes)}</div>` : ''}
+
+    <div class="footer">
+      <span class="badge">Bon réutilisable en pharmacie</span>
+      <div class="terms">
+        Présentez ce bon lors d'un prochain achat pour déduction.<br/>
+        Non remboursable en espèces.
+      </div>
+    </div>
+  </div>
+  <script>
+    window.addEventListener('load', () => {
+      setTimeout(() => { window.focus(); window.print(); }, 200);
+    });
+  </script>
+</body>
+</html>`
+}
+
+export function printCreditNoteReceipt(receipt: CreditNoteReceipt): void {
+  const w = window.open('', '_blank', 'width=420,height=640')
+  if (!w) return
+  w.document.open()
+  w.document.write(buildCreditNoteReceiptHtml(receipt))
   w.document.close()
 }

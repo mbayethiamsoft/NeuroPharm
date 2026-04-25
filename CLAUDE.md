@@ -52,7 +52,10 @@ Avant de commencer une tâche, consulter au besoin :
 - `docs/Medicaments.md` — catalogue médicaments, CRUD, soft delete, badges stock/expiration.
 - `docs/Stock.md` — mouvements de stock (IN/OUT/ADJUSTMENT/RETURN/EXPIRED), campagnes inventaire.
 - `docs/Ventes.md` — point de vente (POS), calculs, décrémentation stock atomique, événement temps réel.
+- `docs/VentesEnAttente.md` — ventes en attente (pause/reprise au POS), modèle séparé `PendingSale`, aucun impact stock, raison + note, conversion en `Sale` finale.
 - `docs/Carnet.md` — ventes à crédit (carnet), clients, remboursements, rapport PDF, plafond de crédit.
+- `docs/Avoirs.md` — avoirs (credit notes) : émission (retour, erreur, ordonnance partielle), consommation atomique au POS, statut effectif, audit trail.
+- `docs/Assurances.md` — tiers payant : institutions (assurances, mutuelles, CMU, IPM), bénéficiaires (titulaires + ayants droit), split couverture, rapport PDF + e-mail.
 - `docs/Fournisseurs.md` — gestion fournisseurs, commandes d'achat (workflow statuts).
 - `docs/Personnel.md` — employés, présences, permissions par défaut par rôle.
 - `docs/Comptabilite.md` — résumé financier (revenus ventes vs dépenses), gestion des dépenses.

@@ -225,6 +225,18 @@ Quand `paymentMethod=CREDIT`, un sélecteur de client (carnet) obligatoire appar
 2. **Pré-remplissage de la création** : le bouton « + Nouveau client » ouvre la modale pré-remplie avec le nom et le téléphone des champs optionnels.
 3. **Synchronisation retour** : dès qu'un Customer est sélectionné (ou créé), son `fullName` et son `phone` sont recopiés dans les champs optionnels — l'utilisateur voit ainsi quel client est attaché à la vente, et ces valeurs servent au reçu si le serveur ne les écrasait pas (NB : pour CREDIT le serveur copie de toute façon depuis le Customer côté backend, cf. § 3).
 
+### 4.3.1 Tiers payant (INSURANCE)
+
+Quand `paymentMethod=INSURANCE`, un encart bleu apparaît avec :
+
+- **Sélecteur d'institution** (obligatoire) : liste les `Insurance` actives de la pharmacie.
+- **Sélecteur de bénéficiaire** (obligatoire) : liste les `InsuranceBeneficiary` actifs de l'institution choisie, avec un bouton `+` pour créer un nouveau titulaire / ayant droit à la volée.
+- **Taux pour cette vente (%)** (optionnel) : surcharge ponctuelle du `coverageRate` par défaut de l'institution. Si vide, le taux de l'institution est utilisé.
+- **N° de bon** (optionnel) : référence ordonnance/bon à reporter sur la créance (`insuranceClaimRef`).
+- **Split temps réel** : deux cartes « Part institution (X%) » et « Reste patient » calculées sur le total courant.
+
+Sur soumission, le serveur persiste : `insuranceId`, `beneficiaryId`, `insuranceCoverage` (taux effectif snapshot), `insuranceAmount` (montant pris en charge), `patientAmount` (reste à charge), `insuranceClaimRef`, `insuranceClaimStatus` (défaut `pending`). Les champs `customerName` / `customerPhone` sont **snapshotés** automatiquement depuis le bénéficiaire côté serveur (comme pour le CREDIT). Voir `docs/Assurances.md` pour la gestion des institutions, bénéficiaires et rapports.
+
 ### 4.4 Caisse — espèces reçues & monnaie à rendre (CASH)
 
 Quand `paymentMethod=CASH`, un encart vert apparaît au-dessus de la case « Ordonnance » :
@@ -243,6 +255,7 @@ Le champ est facultatif : une vente CASH peut être enregistrée sans saisir le 
 
 - Affichage : Sous-total → Remise → TVA → **Total**
 - Bouton « Valider la vente » : désactivé si panier vide
+- Bouton **« Mettre en attente »** (icône horloge, à droite de Valider) : sauvegarde le panier dans une `PendingSale` sans encaisser ni toucher au stock — voir `docs/VentesEnAttente.md`. Une vente reprise via `?pendingId=X` est marquée `converted` automatiquement après finalisation.
 - Modal de succès avec récapitulatif (n° de reçu + total) et bouton **« Imprimer le reçu »**
 
 > ⚠️ La modale de succès **ne se ferme pas automatiquement** (incident historique : un timeout de 3 s fermait la modale avant que le caissier n'ait eu le temps de cliquer sur « Imprimer le reçu »). L'utilisateur doit cliquer « Fermer » ou « Imprimer le reçu » manuellement.
@@ -324,7 +337,7 @@ Affiche en-tête (date, vendeur, paiement, statut, client si présent, badge ord
 | `CASH` | Espèces | Standard |
 | `MOBILE_MONEY` | Mobile Money | Wave, Orange Money |
 | `CARD` | Carte bancaire | Terminal |
-| `INSURANCE` | Assurance | Tiers payant |
+| `INSURANCE` | Assurance | Tiers payant — lien `insuranceId` + `beneficiaryId` obligatoires, voir `docs/Assurances.md` |
 | `CREDIT` | Crédit (carnet) | Client régulier — lien `customerId` obligatoire, voir `docs/Carnet.md` |
 
 ---
